@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 import random
-from time import gmtime
 from typing import Any, Callable, DefaultDict, Dict, List, Optional, Tuple
 
 import torch
@@ -77,20 +76,19 @@ class PlayerState:
 	points: int = 0
 
 	def to_state_array(self, private: bool) -> List[int]:
-		default_card_deck = get_default_card_deck()
-
 		state: List[int] = [
 			self.points,
 			sum(self.deck.values()),
 		]
 
-		for card_type in default_card_deck.keys():
-			if private:
-				state.append(self.hand.get(card_type, 0))
-			else:
-				state.append(self.hand.get(card_type, 0))
+		for card_type, _ in CARD_INFO:
+			state.append(self.hand.get(card_type, 0))
+			# Private is ignored
 
 		return state
+
+	def __str__(self):
+		return f"Points: {self.points} Hand: {self.hand}"
 
 @dataclass
 class QueueItem:
@@ -124,8 +122,13 @@ class ShopState:
 
 	def to_state_array(self, player_id: int) -> List[int]:
 		state: List[int] = []
-
+		# TODO
 		return state
+	
+	def __str__(self):
+		item_str = " ".join([item.name for item in self.items])
+		queue_str = " ".join([f"{queue_item.card_type.name}x{queue_item.count}" for queue_item in self.queue])
+		return f"Items: {item_str} Queue: {queue_str} Limbo: {self.limbo_item}"
 
 
 # Possible decisions:
@@ -134,21 +137,13 @@ class ShopState:
 # - Shop decision
 
 
+def to_one_hot(value: int, count: int) -> List[int]:
+	return [1 if value == i else 0 for i in range(count)]
 
 class PlayerDecision:
 	DRAW_CARD = 0
 	PLACE_CARD_IN_QUEUE = 1
 	SHOP_DECISION = 2
-
-	def to_one_hot(type: int) -> List[int]:
-		if type == self.DRAW_CARD:
-			return [1, 0, 0]
-		elif type == self.PLACE_CARD_IN_QUEUE:
-			return [0, 1, 0]
-		elif type == self.SHOP_DECISION:
-			return [0, 0, 1]
-		else:
-			assert False
 
 	type: int
 
@@ -160,66 +155,109 @@ class PlayerDecision:
 	# SHOP_DECISION
 	item_id: Optional[int] = None
 
-	def __init__(self, type: int, card_type: Optional[CardType] = None, count: Optional[int] = None, item_id: Optional[int] = None):
+	def __init__(self, type: int, card_type: Optional[CardType] = None, count: Optional[int] = None, queue_id: Optional[int] = None, item_id: Optional[int] = None):
 		self.type = type
 		self.card_type = card_type
 		self.count = count
 		self.item_id = item_id
+		self.queue_id = queue_id
 
 	def isValid(self):
 		if self.type == PlayerDecision.DRAW_CARD:
 			return True
 		elif self.type == PlayerDecision.PLACE_CARD_IN_QUEUE:
 			return self.card_type is not None and self.count is not None
-		elif self.type == PlayerDecision.SHOP_DECISION:
-			return self.item_id is not None
+		# elif self.type == PlayerDecision.SHOP_DECISION:
+		# 	return self.item_id is not None
 		else:
 			return False
-		
-	@staticmethod
-	def from_state_array(state: List[int]) -> Optional["PlayerDecision"]:
-		# Argmax on the first 3 elements
-		type = torch.argmax(torch.tensor(state[:3]))
-
-		if type == PlayerDecision.DRAW_CARD:
-			return PlayerDecision(PlayerDecision.DRAW_CARD)
-		elif type == PlayerDecision.PLACE_CARD_IN_QUEUE:
-			# Check the card type
-			card_type_id = state[3]
-
-			card_type = CardType.from_id(card_type_id)
-
-			card_count = state[4]
-
-			return PlayerDecision(PlayerDecision.PLACE_CARD_IN_QUEUE, card_type, card_count)
-		elif type == PlayerDecision.SHOP_DECISION:
-
-			item_id = state[5]
-
-			return PlayerDecision(PlayerDecision.SHOP_DECISION, item_id=item_id)
-		else:
-			return None
-
-	@staticmethod
-	def type_to_one_hot(type: int) -> List[int]:
-		if type == PlayerDecision.DRAW_CARD:
-			return [1, 0, 0]
-		elif type == PlayerDecision.PLACE_CARD_IN_QUEUE:
-			return [0, 1, 0]
-		elif type == PlayerDecision.SHOP_DECISION:
-			return [0, 0, 1]
-		else:
-			assert False
 
 	def to_state_array(self) -> List[int]:
 		if self.type == PlayerDecision.DRAW_CARD:
-			return self.type_to_one_hot(self.type) + [0, 0, 0]
+			encoded_type = 0
 		elif self.type == PlayerDecision.PLACE_CARD_IN_QUEUE:
-			return self.type_to_one_hot(self.type) + [self.card_type.id, self.count, 0]
-		elif self.type == PlayerDecision.SHOP_DECISION:
-			return self.type_to_one_hot(self.type) + [0, 0, self.item_id]
+			encoded_type = 1 + self.card_type.id
+		# elif self.type == PlayerDecision.SHOP_DECISION:
+		# 	encoded_type = 1 + len(CARD_INFO)
 		else:
-			assert None
+			assert False
+
+		return to_one_hot(encoded_type, 1 + len(CARD_INFO))
+
+		# state: List[int] = []
+
+		# if self.type == PlayerDecision.DRAW_CARD:
+		# 	state += to_one_hot(self.type, 3)
+		# 	state += [0] * (len(CARD_INFO) + 2 + 1)
+
+		# elif self.type == PlayerDecision.PLACE_CARD_IN_QUEUE:
+		# 	state += to_one_hot(self.type, 3)
+		# 	# state += [self.card_type.id, self.count, 0]
+		# 	state += to_one_hot(self.card_type.id, len(CARD_INFO))
+		# 	state += [self.count, self.queue_id]
+		# 	# Padding
+		# 	state += [0] # shop decision
+
+		# # elif self.type == PlayerDecision.SHOP_DECISION:
+		# # 	state += to_one_hot(self.type, 3)
+		# # 	state += [0] * (len(CARD_INFO) + 2)
+
+		# # 	state += [self.item_id]
+		# else:
+		# 	assert None
+
+		# return state
+
+	@staticmethod
+	def from_state_array(state) -> Optional["PlayerDecision"]:
+		if type(state) == torch.Tensor or type(state) == List:
+			action_type = torch.argmax(torch.tensor(state))
+		elif type(state) == float or type(state) == int:
+			action_type = int(state)
+		else:
+			assert False, "Invalid state type"
+
+
+		if action_type == PlayerDecision.DRAW_CARD:
+			return PlayerDecision(PlayerDecision.DRAW_CARD)
+		elif 0 < action_type and action_type <= len(CARD_INFO):
+			card_type_id = action_type - 1
+			card_type = CardType.from_id(card_type_id)
+
+			# card_count = int(state[len(CARD_INFO)+1])
+			# THIS IS HARDCODED BOIS
+			card_count = 1
+			# queue_id = int(state[len(CARD_INFO)+2])
+			queue_id = 0
+
+
+			return PlayerDecision(PlayerDecision.PLACE_CARD_IN_QUEUE, card_type, card_count, queue_id=queue_id)
+		elif action_type == PlayerDecision.SHOP_DECISION:
+			item_id = int(state[-1])
+			return PlayerDecision(PlayerDecision.SHOP_DECISION, item_id=item_id)
+
+		# # Argmax on the first 3 elements
+		# type = torch.argmax(torch.tensor(state[:3]))
+
+		# if type == PlayerDecision.DRAW_CARD:
+		# 	return PlayerDecision(PlayerDecision.DRAW_CARD)
+		# elif type == PlayerDecision.PLACE_CARD_IN_QUEUE:
+		# 	# Check the card type
+		# 	# Card id is the argmax of the next 8 elements
+		# 	card_type_id = torch.argmax(torch.tensor(state[3:3+len(CARD_INFO)]))
+
+		# 	card_type = CardType.from_id(card_type_id)
+
+		# 	card_count = int(state[3+len(CARD_INFO)])
+		# 	queue_id = int(state[3+len(CARD_INFO)+1])
+
+		# 	return PlayerDecision(PlayerDecision.PLACE_CARD_IN_QUEUE, card_type, card_count, queue_id=queue_id)
+		# elif type == PlayerDecision.SHOP_DECISION:
+		# 	item_id = int(state[-1])
+
+		# 	return PlayerDecision(PlayerDecision.SHOP_DECISION, item_id=item_id)
+		# else:
+		# 	return None
 
 	def __eq__(self, other):
 		if self.type != other.type:
@@ -236,6 +274,15 @@ class PlayerDecision:
 		
 		assert False
 
+	def __repr__(self):
+		if self.type == PlayerDecision.DRAW_CARD:
+			return f"Draw card"
+		elif self.type == PlayerDecision.PLACE_CARD_IN_QUEUE:
+			return f"Place {self.card_type.name}x{self.count} in queue {self.queue_id}"
+		elif self.type == PlayerDecision.SHOP_DECISION:
+			return f"Place item {self.item_id} in shop"
+		else:
+			assert False
 
 
 STATE_START = 0
@@ -274,6 +321,15 @@ class GameState:
 
 		return state
 
+	def __str__(self):
+		return f""" {self.state}
+Player 0: {self.player_states[0]}
+Player 1: {self.player_states[1]}
+
+Shop 0: {self.shops[0]}
+Shop 1: {self.shops[1]}
+"""
+		
 
 class Player:
 
@@ -515,15 +571,17 @@ def validate_game_state(game_state: GameState) -> bool:
 	
 	return True
 
+AI_PLAYER_ID = 0
+NPC_PLAYER_ID = 1
+
 # Difference between first and second player
 def get_game_score(game_state: GameState) -> int:
 	assert len(game_state.player_states) == 2
 
-	player0_points = game_state.player_states[0].points
-	player1_points = game_state.player_states[1].points
+	ai_player = game_state.player_states[AI_PLAYER_ID]
+	npc_player = game_state.player_states[NPC_PLAYER_ID]
 
-
-	return player0_points - player1_points
+	return ai_player.points - npc_player.points
 
 
 def print_game_state(game_state: GameState) -> None:
@@ -552,8 +610,7 @@ def play_game(player0: Player, player1: Player) -> GameState:
 
 	return game_runner.game_state
 
-AI_PLAYER_ID = 0
-NPC_PLAYER_ID = 1
+
 
 
 def run_player_turn_until(game_state: GameState, player_id: int):
@@ -622,18 +679,32 @@ def play_game_until_decision(game_state: GameState, npc: Player) -> None:
 		elif game_state.state == STATE_END:
 			pass
 		elif game_state.state == STATE_ERROR:
-			print("Game state error")
+			# print("Game state error")
 			pass
 		elif game_state.state in DECISION_STATES:
 			pass
 		else:
 			assert False, "Invalid game state"
 
+	def can_player_continue(game_state: GameState, player_id: int) -> bool:
+		if sum(game_state.player_states[player_id].deck.values()) > 0:
+			return True
+
+		if sum(game_state.player_states[player_id].hand.values()) > 0:
+			return True
+		
+		return False
+
+
 	while True:
 
 		while True:
 			# Run AI player
 			game_step(game_state, AI_PLAYER_ID)
+
+			if not can_player_continue(game_state, AI_PLAYER_ID):
+				game_state.state = STATE_END
+				return
 
 			if game_state.state in END_GAME_STATES:
 				return
@@ -651,6 +722,10 @@ def play_game_until_decision(game_state: GameState, npc: Player) -> None:
 		while True:
 			game_step(game_state, NPC_PLAYER_ID)
 
+			if not can_player_continue(game_state, NPC_PLAYER_ID):
+				game_state.state = STATE_END
+				return
+
 			if game_state.state in END_GAME_STATES:
 				return
 
@@ -663,6 +738,25 @@ def play_game_until_decision(game_state: GameState, npc: Player) -> None:
 				game_state.turn = AI_PLAYER_ID
 				game_state.turn_counter += 1
 				break
+
+
+def play_game_until_decision_that_is_not_a_shop_decision(game_state: GameState, npc: Player) -> None:
+	while True:
+		play_game_until_decision(game_state, npc)
+
+		if game_state.state == STATE_SHOP_0_DECISION or game_state.state == STATE_SHOP_1_DECISION:
+			set_decision(game_state, npc.run_player_decision(game_state, AI_PLAYER_ID), AI_PLAYER_ID)
+			continue
+
+		if game_state.state == STATE_TURN_0 or game_state.state == STATE_TURN_1 or game_state.state == STATE_TURN_2:
+			# And we cannot do anything other than draw a card
+			# This is so that we make model training easier
+			if sum(game_state.player_states[AI_PLAYER_ID].hand.values()) == 0:
+				set_decision(game_state, PlayerDecision(PlayerDecision.DRAW_CARD), AI_PLAYER_ID)
+				continue
+			return
+
+		return
 
 
 def set_decision(game_state: GameState, decision: Optional[PlayerDecision], player_id: int) -> None:
@@ -713,8 +807,13 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 		player_state = game_state.player_states[player_id]
 
 		if decision.type == PlayerDecision.DRAW_CARD:
+			if sum(player_state.deck.values()) == 0:
+				game_state.state = STATE_ERROR
+				return
+
 			draw_card = draw_from_deck(player_state.deck)
 			player_state.hand[draw_card] += 1
+
 		elif decision.type == PlayerDecision.PLACE_CARD_IN_QUEUE:
 			if player_state.hand[decision.card_type] < decision.count:
 				game_state.state = STATE_ERROR
@@ -743,7 +842,10 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 
 	elif game_state.state == STATE_END:
 		pass
+	elif game_state.state == STATE_ERROR:
+		pass
 	else:
+
 		assert False, "Invalid game state"
 
 class RandomPlayer(Player):
@@ -753,7 +855,15 @@ class RandomPlayer(Player):
 	# 	return ShopDecision(random.randint(0, len(shop.items) - 1))
 
 	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
-		
+		if game_state.state in [STATE_SHOP_0_DECISION, STATE_SHOP_1_DECISION]:
+			if game_state.state == STATE_SHOP_0_DECISION:
+				shop_id = 0
+			else:
+				shop_id = 1
+
+			shop = game_state.shops[shop_id]
+			return PlayerDecision(PlayerDecision.SHOP_DECISION, item_id=random.randint(0, len(shop.items) - 1))
+
 		possible_decision_types: List[int] = []
 
 		if sum(game_state.player_states[player_id].deck.values()) > 0:
@@ -772,7 +882,7 @@ class RandomPlayer(Player):
 			player_state = game_state.player_states[player_id]
 			card_type = random.choice(list(player_state.hand.keys()))
 			count = random.randint(1, player_state.hand[card_type])
-			return PlayerDecision(PlayerDecision.PLACE_CARD_IN_QUEUE, card_type, count)
+			return PlayerDecision(PlayerDecision.PLACE_CARD_IN_QUEUE, card_type, count, queue_id=random.randint(0, 1))
 
 
 import time

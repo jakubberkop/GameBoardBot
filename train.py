@@ -9,10 +9,11 @@ import random
 import statistics
 import torch.optim as optim
 import torch 
+import tqdm
 import datetime
 import distutils.util
 
-from game import AI_PLAYER_ID, STATE_END, STATE_ERROR, Player, GameState, PlayerDecision, get_game_score, initialize_game_state, play_game, RandomPlayer, play_game_until_decision, set_decision
+from game import AI_PLAYER_ID, STATE_END, STATE_ERROR, Player, GameState, PlayerDecision, game_is_over, get_game_score, initialize_game_state, play_game, RandomPlayer, play_game_until_decision, play_game_until_decision_that_is_not_a_shop_decision, set_decision
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 # DEVICE = 'cpu'
@@ -23,14 +24,14 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 def define_parameters():
 	params: Dict[str, Any] = {}
 	# Neural Network
-	params['epsilon_decay_linear'] = 1/1000
+	params['epsilon_decay_linear'] = 1/100
 	params['learning_rate'] = 0.00013629
 	params['first_layer_size'] = 200	# neurons in the first layer
 	params['second_layer_size'] = 20   # neurons in the second layer
 	params['third_layer_size'] = 50	# neurons in the third layer
-	params['episodes'] = 300		  
+	params['episodes'] = 1000		  
 	params['memory_size'] = 2500
-	params['batch_size'] = 1000
+	params['batch_size'] = 300
 	# Settings
 	params['weights_path'] = 'weights/weights.h5'
 	params['train'] = True
@@ -120,6 +121,7 @@ def test(params):
 	score, mean, stdev = run(params)
 	return score, mean, stdev
 
+
 def run(params: Dict[str, Any]):
 
 	agent = DQNAgent(params)
@@ -130,8 +132,12 @@ def run(params: Dict[str, Any]):
 	counter_plot = []
 	record = 0
 	total_score = 0
-	while counter_games < params['episodes']:
+	# while counter_games < params['episodes']:
 
+	
+	for _ in tqdm.tqdm(range(params['episodes']), desc="Episodes"):
+
+		# print("Episode " + str(counter_games))
 		# for event in pygame.event.get():
 		# 	if event.type == pygame.QUIT:
 		# 		pygame.quit()
@@ -141,13 +147,13 @@ def run(params: Dict[str, Any]):
 		
 		random_player = RandomPlayer()
 		game = initialize_game_state()
-		play_game_until_decision(game, random_player)
+		play_game_until_decision_that_is_not_a_shop_decision(game, random_player)
  
 		steps = 0	# steps since the last positive reward
 
 		while (not game.state == STATE_END and not game.state == STATE_ERROR):
 			# print("Game state", game.state)
-			play_game_until_decision(game, random_player)
+			play_game_until_decision_that_is_not_a_shop_decision(game, random_player)
 
 			if not params['train']:
 				agent.epsilon = 0.01
@@ -175,19 +181,28 @@ def run(params: Dict[str, Any]):
 				with torch.no_grad():
 					state_old_tensor = torch.tensor(state_old.reshape((1, STATE_TENSOR_SIZE)), dtype=torch.float32).to(DEVICE)
 					prediction = agent(state_old_tensor)
+					# print("Prediction", prediction)
 					# final_move = np.eye(3)[np.argmax(prediction.detach().cpu().numpy()[0])]
 					final_move = prediction.detach().cpu().numpy()[0]
 
 
 			# perform new move and get new state
+			if False: # True: # params['display']:
+				print("State:", game)
+				print("Decision:", PlayerDecision.from_state_array(final_move))
+
 			set_decision(game, PlayerDecision.from_state_array(final_move), AI_PLAYER_ID)
-			play_game_until_decision(game, random_player)
+			play_game_until_decision_that_is_not_a_shop_decision(game, random_player)
+
+			if game.state == STATE_ERROR:
+				# Replay the last move
+				set_decision(game, PlayerDecision.from_state_array(final_move), AI_PLAYER_ID)
 
 			state_new = agent.get_state(game, AI_PLAYER_ID)
 
 			# set reward for the new state
 			reward = agent.set_reward(game)
-			print("Reward: ", reward)
+			# print("Reward: ", reward)
 			
 			# if food is eaten, steps is set to 0
 			# if reward > 0:
@@ -212,7 +227,7 @@ def run(params: Dict[str, Any]):
 
 		counter_games += 1
 		total_score += get_game_score(game)
-		print(f'Game {counter_games}	  Reward: {reward}')
+		# print(f'Game {counter_games}	  Reward: {reward}')
 		score_plot.append(get_game_score(game))
 		counter_plot.append(counter_games)
 	mean, stdev = get_mean_stdev(score_plot)
