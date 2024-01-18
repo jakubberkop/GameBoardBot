@@ -1,65 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Reinforcement Learning (DQN) Tutorial
-=====================================
-**Author**: `Adam Paszke <https://github.com/apaszke>`_
-            `Mark Towers <https://github.com/pseudo-rnd-thoughts>`_
-
-
-This tutorial shows how to use PyTorch to train a Deep Q Learning (DQN) agent
-on the CartPole-v1 task from `Gymnasium <https://gymnasium.farama.org>`__.
-
-**Task**
-
-The agent has to decide between two actions - moving the cart left or
-right - so that the pole attached to it stays upright. You can find more
-information about the environment and other more challenging environments at
-`Gymnasium's website <https://gymnasium.farama.org/environments/classic_control/cart_pole/>`__.
-
-.. figure:: /_static/img/cartpole.gif
-   :alt: CartPole
-
-   CartPole
-
-As the agent observes the current state of the environment and chooses
-an action, the environment *transitions* to a new state, and also
-returns a reward that indicates the consequences of the action. In this
-task, rewards are +1 for every incremental timestep and the environment
-terminates if the pole falls over too far or the cart moves more than 2.4
-units away from center. This means better performing scenarios will run
-for longer score, accumulating larger return.
-
-The CartPole task is designed so that the inputs to the agent are 4 real
-values representing the environment state (position, velocity, etc.).
-We take these 4 inputs without any scaling and pass them through a 
-small fully-connected network with 2 outputs, one for each action. 
-The network is trained to predict the expected value for each action, 
-given the input state. The action with the highest expected value is 
-then chosen.
-
-
-**Packages**
-
-
-First, let's import needed packages. Firstly, we need
-`gymnasium <https://gymnasium.farama.org/>`__ for the environment,
-installed by using `pip`. This is a fork of the original OpenAI
-Gym project and maintained by the same team since Gym v0.19.
-If you are running this in Google Colab, run:
-
-.. code-block:: bash
-
-   %%bash
-   pip3 install gymnasium[classic_control]
-
-We'll also use the following from PyTorch:
-
--  neural networks (``torch.nn``)
--  optimization (``torch.optim``)
--  automatic differentiation (``torch.autograd``)
-
-"""
-
 import gymnasium as gym
 import math
 import random
@@ -75,6 +13,12 @@ import torch.nn.functional as F
 from game import get_game_score
 
 import game_env
+
+
+import pathlib
+import pathlib
+import datetime
+import glob
 
 # import pytracy
 # pytracy.set_tracing_mode(pytracy.TracingMode.All)
@@ -95,7 +39,8 @@ plt.ion()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = "cpu"
 
-num_episodes = 2000
+num_episodes = 10000
+show_graph_frequency = 50
 
 ######################################################################
 # Replay Memory
@@ -138,81 +83,6 @@ class ReplayMemory(object):
         return len(self.memory)
 
 
-######################################################################
-# Now, let's define our model. But first, let's quickly recap what a DQN is.
-#
-# DQN algorithm
-# -------------
-#
-# Our environment is deterministic, so all equations presented here are
-# also formulated deterministically for the sake of simplicity. In the
-# reinforcement learning literature, they would also contain expectations
-# over stochastic transitions in the environment.
-#
-# Our aim will be to train a policy that tries to maximize the discounted,
-# cumulative reward
-# :math:`R_{t_0} = \sum_{t=t_0}^{\infty} \gamma^{t - t_0} r_t`, where
-# :math:`R_{t_0}` is also known as the *return*. The discount,
-# :math:`\gamma`, should be a constant between :math:`0` and :math:`1`
-# that ensures the sum converges. A lower :math:`\gamma` makes 
-# rewards from the uncertain far future less important for our agent 
-# than the ones in the near future that it can be fairly confident 
-# about. It also encourages agents to collect reward closer in time 
-# than equivalent rewards that are temporally far away in the future.
-#
-# The main idea behind Q-learning is that if we had a function
-# :math:`Q^*: State \times Action \rightarrow \mathbb{R}`, that could tell
-# us what our return would be, if we were to take an action in a given
-# state, then we could easily construct a policy that maximizes our
-# rewards:
-#
-# .. math:: \pi^*(s) = \arg\!\max_a \ Q^*(s, a)
-#
-# However, we don't know everything about the world, so we don't have
-# access to :math:`Q^*`. But, since neural networks are universal function
-# approximators, we can simply create one and train it to resemble
-# :math:`Q^*`.
-#
-# For our training update rule, we'll use a fact that every :math:`Q`
-# function for some policy obeys the Bellman equation:
-#
-# .. math:: Q^{\pi}(s, a) = r + \gamma Q^{\pi}(s', \pi(s'))
-#
-# The difference between the two sides of the equality is known as the
-# temporal difference error, :math:`\delta`:
-#
-# .. math:: \delta = Q(s, a) - (r + \gamma \max_a' Q(s', a))
-#
-# To minimize this error, we will use the `Huber
-# loss <https://en.wikipedia.org/wiki/Huber_loss>`__. The Huber loss acts
-# like the mean squared error when the error is small, but like the mean
-# absolute error when the error is large - this makes it more robust to
-# outliers when the estimates of :math:`Q` are very noisy. We calculate
-# this over a batch of transitions, :math:`B`, sampled from the replay
-# memory:
-#
-# .. math::
-#
-#    \mathcal{L} = \frac{1}{|B|}\sum_{(s, a, s', r) \ \in \ B} \mathcal{L}(\delta)
-#
-# .. math::
-#
-#    \text{where} \quad \mathcal{L}(\delta) = \begin{cases}
-#      \frac{1}{2}{\delta^2}  & \text{for } |\delta| \le 1, \\
-#      |\delta| - \frac{1}{2} & \text{otherwise.}
-#    \end{cases}
-#
-# Q-network
-# ^^^^^^^^^
-#
-# Our model will be a feed forward  neural network that takes in the
-# difference between the current and previous screen patches. It has two
-# outputs, representing :math:`Q(s, \mathrm{left})` and
-# :math:`Q(s, \mathrm{right})` (where :math:`s` is the input to the
-# network). In effect, the network is trying to predict the *expected return* of
-# taking each action given the current input.
-#
-
 class DQN(nn.Module):
 
     def __init__(self, n_observations, n_actions):
@@ -220,7 +90,8 @@ class DQN(nn.Module):
         self.layer1 = nn.Linear(n_observations, 128)
         self.layer2 = nn.Linear(128, 128)
         self.layer3 = nn.Linear(128, 128)
-        self.layer4 = nn.Linear(128, n_actions)
+        self.layer4 = nn.Linear(128, 128)
+        self.layer5 = nn.Linear(128, n_actions)
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
@@ -228,7 +99,10 @@ class DQN(nn.Module):
         x = F.relu(self.layer1(x))
         x = F.relu(self.layer2(x))
         x = F.relu(self.layer3(x))
-        return F.softmax(self.layer4(x), dim=1)
+        x = F.relu(self.layer4(x))
+        x = F.softmax(self.layer5(x), dim=1)
+
+        return x
 
 
 ######################################################################
@@ -275,6 +149,15 @@ state, info = env.reset()
 n_observations = len(state)
 
 policy_net = DQN(n_observations, n_actions).to(device)
+
+# Load newest policy_net weights
+
+
+# Get the newest policy_net weights
+# policy_net_weights = sorted(glob.glob("results/*/policy_net.pt"))[-1]
+# print(f"Loading policy_net weights from {policy_net_weights}")
+# policy_net.load_state_dict(torch.load(policy_net_weights))
+
 target_net = DQN(n_observations, n_actions).to(device)
 target_net.load_state_dict(policy_net.state_dict())
 
@@ -332,7 +215,7 @@ def plot_scores(show_result=False):
         plt.plot(mean_game_lengths.numpy(), label="MEAN Game Lengths", )
 
     plt.legend()
-    plt.pause(0.001)  # pause a bit so that plots are updated
+    plt.pause(0.01)  # pause a bit so that plots are updated
     if is_ipython:
         if not show_result:
             display.display(plt.gcf())
@@ -402,8 +285,7 @@ def optimize_model():
     # Compute the expected Q values
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
 
-    # Compute Huber loss
-    criterion = nn.SmoothL1Loss()
+    criterion = nn.L1Loss()
     loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
 
     # Optimize the model
@@ -469,15 +351,18 @@ for i_episode in tqdm.tqdm(range(num_episodes)):
         if done:
             scores.append(get_game_score(env.game_state))
             game_lengths.append(env.game_state.turn_counter)
-            # if i_episode % 200 == 0:
-            #     plot_scores()
+
+            if show_graph_frequency is not None and i_episode % show_graph_frequency == 0:
+                plot_scores()
+
+            # if i_episode % 100 == 0:
+            #     print(f"Max score: {max(scores)}, Max game length: {max(game_lengths)}")
             break
 
 print('Complete')
 
 # Save the policy_net weights and results in new folder
-import pathlib
-import datetime
+
 
 # Create a new folder for the results
 result_dir = pathlib.Path(f"results/{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
