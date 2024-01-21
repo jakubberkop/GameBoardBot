@@ -1,7 +1,7 @@
 import gymnasium as gym
 import numpy as np
 
-from game import AI_PLAYER_ID, STATE_END, STATE_ERROR, Player, GameState, PlayerDecision, game_is_over, get_game_score, initialize_game_state, play_game, RandomPlayer, play_game_until_decision, play_game_until_decision_that_is_not_a_shop_decision, set_decision
+from game import AI_PLAYER_ID, STATE_END, STATE_ERROR, Player, GameState, PlayerDecision, game_is_over, get_game_score, initialize_game_state, play_game, RandomPlayer, play_game_until_decision_one_player, play_game_until_decision_one_player_that_is_not_a_shop_decision, set_decision
 
 class GameEnv(gym.Env):
 
@@ -58,7 +58,7 @@ class GameEnv(gym.Env):
 		self.game_state = initialize_game_state()
 		random_player = RandomPlayer()
 
-		play_game_until_decision_that_is_not_a_shop_decision(self.game_state, random_player)
+		play_game_until_decision_one_player_that_is_not_a_shop_decision(self.game_state, random_player)
 
 		observation = self.get_obs()
 
@@ -68,7 +68,7 @@ class GameEnv(gym.Env):
 		return observation, dict()
 
 	def step(self, action: np.ndarray):
-		play_game_until_decision_that_is_not_a_shop_decision(self.game_state, RandomPlayer())
+		play_game_until_decision_one_player_that_is_not_a_shop_decision(self.game_state, RandomPlayer())
 
 		decision = PlayerDecision.from_state_array(action)
 
@@ -77,7 +77,7 @@ class GameEnv(gym.Env):
 		else:
 			assert False, "Invalid action"
 
-		play_game_until_decision_that_is_not_a_shop_decision(self.game_state, RandomPlayer())
+		play_game_until_decision_one_player_that_is_not_a_shop_decision(self.game_state, RandomPlayer())
 
 		terminated = self.game_state.end_game or self.game_state.state == STATE_ERROR or self.game_state.state == STATE_END
 

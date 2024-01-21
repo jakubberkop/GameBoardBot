@@ -13,7 +13,7 @@ import tqdm
 import datetime
 import distutils.util
 
-from game import AI_PLAYER_ID, STATE_END, STATE_ERROR, Player, GameState, PlayerDecision, game_is_over, get_game_score, initialize_game_state, play_game, RandomPlayer, play_game_until_decision, play_game_until_decision_that_is_not_a_shop_decision, set_decision
+from game import AI_PLAYER_ID, STATE_END, STATE_ERROR, PlayerDecision, get_game_score, initialize_game_state, play_game, RandomPlayer, play_game_until_decision_one_player_that_is_not_a_shop_decision, set_decision
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 # DEVICE = 'cpu'
@@ -147,13 +147,13 @@ def run(params: Dict[str, Any]):
 		
 		random_player = RandomPlayer()
 		game = initialize_game_state()
-		play_game_until_decision_that_is_not_a_shop_decision(game, random_player)
+		play_game_until_decision_one_player_that_is_not_a_shop_decision(game, random_player)
  
 		steps = 0	# steps since the last positive reward
 
 		while (not game.state == STATE_END and not game.state == STATE_ERROR):
 			# print("Game state", game.state)
-			play_game_until_decision_that_is_not_a_shop_decision(game, random_player)
+			play_game_until_decision_one_player_that_is_not_a_shop_decision(game, random_player)
 
 			if not params['train']:
 				agent.epsilon = 0.01
@@ -192,7 +192,7 @@ def run(params: Dict[str, Any]):
 				print("Decision:", PlayerDecision.from_state_array(final_move))
 
 			set_decision(game, PlayerDecision.from_state_array(final_move), AI_PLAYER_ID)
-			play_game_until_decision_that_is_not_a_shop_decision(game, random_player)
+			play_game_until_decision_one_player_that_is_not_a_shop_decision(game, random_player)
 
 			if game.state == STATE_ERROR:
 				# Replay the last move
