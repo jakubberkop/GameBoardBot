@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field
+from enum import IntEnum
 from numbers import Number
 import random
-from typing import Any, Callable, DefaultDict, Dict, List, Optional, Tuple
+from typing import Any, Callable, DefaultDict, Dict, List, Optional, Set, Tuple
 
 import torch
 import tqdm
@@ -243,27 +244,29 @@ class PlayerDecision:
 		else:
 			assert False
 
+class GameStep(IntEnum):
+	STATE_START = 0
+	STATE_SHOP_0 = 1
+	STATE_SHOP_0_DECISION = 2
+	STATE_SHOP_1 = 3
+	STATE_SHOP_1_DECISION = 4
+	STATE_TURN_0 = 5
+	STATE_TURN_1 = 7
+	STATE_TURN_2 = 9
+	STATE_END_TURN = 11
+	STATE_END = 12
+	STATE_ERROR = 13
 
-STATE_START = 0
-STATE_SHOP_0 = 1
-STATE_SHOP_0_DECISION = 2
-STATE_SHOP_1 = 3
-STATE_SHOP_1_DECISION = 4
-STATE_TURN_0 = 5
-STATE_TURN_1 = 7
-STATE_TURN_2 = 9
-STATE_END_TURN = 11
-STATE_END = 12
-STATE_ERROR = 13
 
-DECISION_STATES = [
-	STATE_SHOP_0_DECISION, STATE_SHOP_1_DECISION, 
-	STATE_TURN_0, STATE_TURN_1, # STATE_TURN_2 #TODO: Implement STATE_TURN_2
-]
+DECISION_STATES: Set[GameStep] = {
+	GameStep.STATE_SHOP_0_DECISION, GameStep.STATE_SHOP_1_DECISION, 
+	GameStep.STATE_TURN_0, GameStep.STATE_TURN_1,
+	# GameStep.STATE_TURN_2 #TODO: Implement GameStep.STATE_TURN_2
+}
 
-END_GAME_STATES = [
-	STATE_END, STATE_ERROR
-]
+END_GAME_STATES: Set[GameStep] = {
+	GameStep.STATE_END, GameStep.STATE_ERROR
+}
 
 AI_PLAYER_ID = 0
 NPC_PLAYER_ID = 1
@@ -275,7 +278,7 @@ class GameState:
 	shops: List[ShopState] = field(default_factory=list)
 	items_deck: Dict[Item, int] = field(default_factory=dict)
 	end_game: bool = False
-	state: int = STATE_START
+	state: int = GameStep.STATE_START
 	turn: int = 0
 	turn_counter: int = 0
 
@@ -360,9 +363,9 @@ def run_shop_until(game_state: GameState, shop_id: int, player_id: int) -> None:
 
 	if score0 == score1:
 		if shop_id == 0:
-			game_state.state = STATE_SHOP_1
+			game_state.state = GameStep.STATE_SHOP_1
 		else:
-			game_state.state = STATE_TURN_0
+			game_state.state = GameStep.STATE_TURN_0
 		return
 	
 	if score0 > score1:
@@ -372,16 +375,16 @@ def run_shop_until(game_state: GameState, shop_id: int, player_id: int) -> None:
 
 	if player_id != winner:
 		if shop_id == 0:
-			game_state.state = STATE_SHOP_1
+			game_state.state = GameStep.STATE_SHOP_1
 		else:
-			game_state.state = STATE_TURN_0
+			game_state.state = GameStep.STATE_TURN_0
 		return
 
 	if shop.get_item_count() == 2:
 		if shop_id == 0:
-			game_state.state = STATE_SHOP_0_DECISION
+			game_state.state = GameStep.STATE_SHOP_0_DECISION
 		else:
-			game_state.state = STATE_SHOP_1_DECISION
+			game_state.state = GameStep.STATE_SHOP_1_DECISION
 		return
 
 	elif shop.get_item_count() == 1:
@@ -405,7 +408,7 @@ def run_shop_until(game_state: GameState, shop_id: int, player_id: int) -> None:
 		if items_to_draw == 0:
 			game_state.end_game = True
 			shop.items = []
-			game_state.state = STATE_END
+			game_state.state = GameStep.STATE_END
 			return
 		elif items_to_draw >= 2:
 			shop.items = [draw_from_deck(game_state.items_deck), draw_from_deck(game_state.items_deck)]
@@ -495,20 +498,20 @@ def play_game_until_decision(game_state: GameState) -> None:
 	def game_step(game_state: GameState, player_id: int) -> None:
 		assert game_state.turn == player_id
 
-		if game_state.state in [STATE_START, STATE_SHOP_0]:
+		if game_state.state in [GameStep.STATE_START, GameStep.STATE_SHOP_0]:
 			run_shop_until(game_state, 0, player_id)
-		elif game_state.state == STATE_SHOP_1:
+		elif game_state.state == GameStep.STATE_SHOP_1:
 			run_shop_until(game_state, 1, player_id)
-		elif game_state.state == STATE_TURN_0:
+		elif game_state.state == GameStep.STATE_TURN_0:
 			pass
-		elif game_state.state == STATE_TURN_1:
+		elif game_state.state == GameStep.STATE_TURN_1:
 			pass
-		elif game_state.state == STATE_TURN_2:
-			game_state.state = STATE_END_TURN
+		elif game_state.state == GameStep.STATE_TURN_2:
+			game_state.state = GameStep.STATE_END_TURN
 			pass
-		elif game_state.state == STATE_END:
+		elif game_state.state == GameStep.STATE_END:
 			pass
-		elif game_state.state == STATE_ERROR:
+		elif game_state.state == GameStep.STATE_ERROR:
 			# print("Game state error")
 			pass
 		elif game_state.state in DECISION_STATES:
@@ -532,7 +535,7 @@ def play_game_until_decision(game_state: GameState) -> None:
 			game_step(game_state, AI_PLAYER_ID)
 
 			if not can_player_continue(game_state, AI_PLAYER_ID):
-				game_state.state = STATE_END
+				game_state.state = GameStep.STATE_END
 				return
 
 			if game_state.state in END_GAME_STATES:
@@ -541,8 +544,8 @@ def play_game_until_decision(game_state: GameState) -> None:
 			if game_state.state in DECISION_STATES:
 				return
 
-			if game_state.state == STATE_END_TURN:
-				game_state.state = STATE_SHOP_0
+			if game_state.state == GameStep.STATE_END_TURN:
+				game_state.state = GameStep.STATE_SHOP_0
 				game_state.turn = NPC_PLAYER_ID
 				game_state.turn_counter += 1
 				break
@@ -552,7 +555,7 @@ def play_game_until_decision(game_state: GameState) -> None:
 			game_step(game_state, NPC_PLAYER_ID)
 
 			if not can_player_continue(game_state, NPC_PLAYER_ID):
-				game_state.state = STATE_END
+				game_state.state = GameStep.STATE_END
 				return
 
 			if game_state.state in END_GAME_STATES:
@@ -561,8 +564,8 @@ def play_game_until_decision(game_state: GameState) -> None:
 			if game_state.state in DECISION_STATES:
 				return
 
-			if game_state.state == STATE_END_TURN:
-				game_state.state = STATE_SHOP_0
+			if game_state.state == GameStep.STATE_END_TURN:
+				game_state.state = GameStep.STATE_SHOP_0
 				game_state.turn = AI_PLAYER_ID
 				game_state.turn_counter += 1
 				break
@@ -594,11 +597,11 @@ def play_game_until_decision_one_player_that_is_not_a_shop_decision(game_state: 
 	while True:
 		play_game_until_decision_one_player(game_state, npc)
 
-		if game_state.state == STATE_SHOP_0_DECISION or game_state.state == STATE_SHOP_1_DECISION:
+		if game_state.state == GameStep.STATE_SHOP_0_DECISION or game_state.state == GameStep.STATE_SHOP_1_DECISION:
 			set_decision(game_state, npc.run_player_decision(game_state, AI_PLAYER_ID), AI_PLAYER_ID)
 			continue
 
-		if game_state.state == STATE_TURN_0 or game_state.state == STATE_TURN_1 or game_state.state == STATE_TURN_2:
+		if game_state.state == GameStep.STATE_TURN_0 or game_state.state == GameStep.STATE_TURN_1 or game_state.state == GameStep.STATE_TURN_2:
 			# And we cannot do anything other than draw a card
 			# This is so that we make model training easier
 			if sum(game_state.player_states[AI_PLAYER_ID].hand.values()) == 0:
@@ -620,51 +623,51 @@ def play_game(game_state: GameState, player0: Player, player_1: Player):
 			assert False, "Player turn is invalid"
 
 def set_decision(game_state: GameState, decision: Optional[PlayerDecision], player_id: int) -> None:
-	if game_state.state == STATE_START:
+	if game_state.state == GameStep.STATE_START:
 		pass
 
-	elif game_state.state == STATE_SHOP_0_DECISION:
+	elif game_state.state == GameStep.STATE_SHOP_0_DECISION:
 		if decision is None:
-			game_state.state = STATE_ERROR
+			game_state.state = GameStep.STATE_ERROR
 			return
 
 		if decision.type != PlayerDecision.SHOP_DECISION:
-			game_state.state = STATE_ERROR
+			game_state.state = GameStep.STATE_ERROR
 			return
 
 		shop = game_state.shops[0]
 
 		shop.place_item_in_limbo(decision.item_id, player_id)
 		
-		game_state.state = STATE_SHOP_1
+		game_state.state = GameStep.STATE_SHOP_1
 		return
 
-	elif game_state.state == STATE_SHOP_1_DECISION:
+	elif game_state.state == GameStep.STATE_SHOP_1_DECISION:
 		if decision is None:
-			game_state.state = STATE_ERROR
+			game_state.state = GameStep.STATE_ERROR
 			return
 
 		if decision.type != PlayerDecision.SHOP_DECISION:
-			game_state.state = STATE_ERROR
+			game_state.state = GameStep.STATE_ERROR
 			return
 
 		shop = game_state.shops[1]
 
 		shop.place_item_in_limbo(decision.item_id, player_id)
 		
-		game_state.state = STATE_TURN_0
+		game_state.state = GameStep.STATE_TURN_0
 		return
 
-	elif game_state.state == STATE_TURN_0 or game_state.state == STATE_TURN_1:
+	elif game_state.state == GameStep.STATE_TURN_0 or game_state.state == GameStep.STATE_TURN_1:
 		if decision is None:
-			game_state.state = STATE_ERROR
+			game_state.state = GameStep.STATE_ERROR
 			return
 
 		player_state = game_state.player_states[player_id]
 
 		if decision.type == PlayerDecision.DRAW_CARD:
 			if sum(player_state.deck.values()) == 0:
-				game_state.state = STATE_ERROR
+				game_state.state = GameStep.STATE_ERROR
 				return
 
 			draw_card = draw_from_deck(player_state.deck)
@@ -672,7 +675,7 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 
 		elif decision.type == PlayerDecision.PLACE_CARD_IN_QUEUE:
 			if player_state.hand[decision.card_type] < decision.count:
-				game_state.state = STATE_ERROR
+				game_state.state = GameStep.STATE_ERROR
 				return
 
 			player_state.hand[decision.card_type] -= decision.count
@@ -682,23 +685,23 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 
 			game_state.shops[player_id].queue.append(QueueItem(decision.card_type, decision.count, player_id))
 		else:
-			game_state.state = STATE_ERROR
+			game_state.state = GameStep.STATE_ERROR
 			return
 
-		if game_state.state == STATE_TURN_0:
-			game_state.state = STATE_TURN_1
-		elif game_state.state == STATE_TURN_1:
-			game_state.state = STATE_TURN_2
-		elif game_state.state == STATE_TURN_2:
-			game_state.state = STATE_END_TURN
+		if game_state.state == GameStep.STATE_TURN_0:
+			game_state.state = GameStep.STATE_TURN_1
+		elif game_state.state == GameStep.STATE_TURN_1:
+			game_state.state = GameStep.STATE_TURN_2
+		elif game_state.state == GameStep.STATE_TURN_2:
+			game_state.state = GameStep.STATE_END_TURN
 		else:
 			assert False, "Invalid game state"
 
 		return
 
-	elif game_state.state == STATE_END:
+	elif game_state.state == GameStep.STATE_END:
 		pass
-	elif game_state.state == STATE_ERROR:
+	elif game_state.state == GameStep.STATE_ERROR:
 		pass
 	else:
 
@@ -710,8 +713,8 @@ class RandomPlayer(Player):
 		return "RandomPlayer"
 
 	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
-		if game_state.state in [STATE_SHOP_0_DECISION, STATE_SHOP_1_DECISION]:
-			if game_state.state == STATE_SHOP_0_DECISION:
+		if game_state.state in [GameStep.STATE_SHOP_0_DECISION, GameStep.STATE_SHOP_1_DECISION]:
+			if game_state.state == GameStep.STATE_SHOP_0_DECISION:
 				shop_id = 0
 			else:
 				shop_id = 1

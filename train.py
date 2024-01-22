@@ -13,7 +13,7 @@ import tqdm
 import datetime
 import distutils.util
 
-from game import AI_PLAYER_ID, STATE_END, STATE_ERROR, PlayerDecision, get_game_score, initialize_game_state, play_game, RandomPlayer, play_game_until_decision_one_player_that_is_not_a_shop_decision, set_decision
+from game import AI_PLAYER_ID, GameStep, PlayerDecision, get_game_score, initialize_game_state, RandomPlayer, play_game_until_decision_one_player_that_is_not_a_shop_decision, set_decision
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 # DEVICE = 'cpu'
@@ -151,7 +151,7 @@ def run(params: Dict[str, Any]):
  
 		steps = 0	# steps since the last positive reward
 
-		while (not game.state == STATE_END and not game.state == STATE_ERROR):
+		while (not game.state == GameStep.STATE_END and not game.state == GameStep.STATE_ERROR):
 			# print("Game state", game.state)
 			play_game_until_decision_one_player_that_is_not_a_shop_decision(game, random_player)
 
@@ -194,7 +194,7 @@ def run(params: Dict[str, Any]):
 			set_decision(game, PlayerDecision.from_state_array(final_move), AI_PLAYER_ID)
 			play_game_until_decision_one_player_that_is_not_a_shop_decision(game, random_player)
 
-			if game.state == STATE_ERROR:
+			if game.state == GameStep.STATE_ERROR:
 				# Replay the last move
 				set_decision(game, PlayerDecision.from_state_array(final_move), AI_PLAYER_ID)
 
@@ -210,9 +210,9 @@ def run(params: Dict[str, Any]):
 				
 			if params['train']:
 				# train short memory base on the new action and state
-				agent.train_short_memory(state_old, final_move, reward, state_new, game.state == STATE_ERROR)
+				agent.train_short_memory(state_old, final_move, reward, state_new, game.state == GameStep.STATE_ERROR)
 				# store the new data into a long term memory
-				agent.remember(state_old, final_move, reward, state_new, game.state == STATE_ERROR)
+				agent.remember(state_old, final_move, reward, state_new, game.state == GameStep.STATE_ERROR)
 
 			# record = get_record(game.score, record)
 

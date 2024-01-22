@@ -3,7 +3,7 @@ from typing import Any, Dict, Iterable, List, NamedTuple
 import numpy as np
 # from operator import add
 import collections
-from game import STATE_ERROR, GameState, get_game_score
+from game import GameStep.STATE_ERROR, GameState, get_game_score
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -67,7 +67,7 @@ class DQNAgent(torch.nn.Module):
     def set_reward(self, game_state: GameState):
         self.reward = 0
 
-        if game_state.state == STATE_ERROR:
+        if game_state.state == GameStep.STATE_ERROR:
             self.reward = -10000
             return self.reward
         
