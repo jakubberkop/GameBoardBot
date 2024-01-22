@@ -164,7 +164,7 @@ def run(params: Dict[str, Any]):
 			# get old state
 			state_old = agent.get_state(game, AI_PLAYER_ID)
 
-			STATE_TENSOR_SIZE = len(game.to_state_array(AI_PLAYER_ID))
+			STATE_TENSOR_SIZE = len(state_old)
 
 			# perform random actions based on agent.epsilon, or choose the action
 			if random.uniform(0, 1) < agent.epsilon:
