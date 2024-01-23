@@ -115,7 +115,12 @@ class ShopState:
 	def get_player_score(self, player_id: int) -> int:
 		# TODO: Implement other scoring rules
 		filtered_queue = [queue_item for queue_item in self.queue if queue_item.player_id == player_id]
-		return sum(queue_item.card_type.value * queue_item.count for queue_item in filtered_queue)
+		score = sum(queue_item.card_type.value * queue_item.count for queue_item in filtered_queue)
+
+		if self.limbo_item and self.limbo_item.player_id == player_id:
+			score -= self.limbo_item.item.value
+
+		return score
 
 	def get_item_count(self) -> int:
 		return len(self.items)
@@ -452,11 +457,18 @@ def get_game_score(game_state: GameState) -> int:
 	return ai_player.points - npc_player.points
 
 def print_game_state(game_state: GameState) -> None:
-	print("-" * 20)
-	print(f"Player 0: {game_state.player_states[0].points} Player 1: {game_state.player_states[1].points}")
-	
-	print(f"Shop 0: {' '.join([item.name for item in game_state.shops[0].items])}")
-	print(f"Shop 1: {' '.join([item.name for item in game_state.shops[1].items])}")
+	print(f"Player 0: P: {game_state.player_states[0].points:3} D: {sum(game_state.player_states[0].deck.values()):2} H: {sum(game_state.player_states[0].hand.values()):2} {'<-' if game_state.turn == 0 else '' }")
+	print(f"Player 1: P: {game_state.player_states[1].points:3} D: {sum(game_state.player_states[1].deck.values()):2} H: {sum(game_state.player_states[1].hand.values()):2} {'<-' if game_state.turn == 1 else '' }")
+
+	def queue_state(shop: ShopState) -> str:
+		# TODO: Evaluate better
+		score = f"{shop.get_player_score(0):2} vs{shop.get_player_score(1):2}"
+		cards = ' '.join([f'{queue_item.card_type.name}x{queue_item.count}:{queue_item.player_id}' for queue_item in shop.queue])
+
+		return f"{score} {cards}"
+
+	print(f"Shop 0: {' '.join([item.name for item in game_state.shops[0].items]):8} + Q: {queue_state(game_state.shops[0])}")
+	print(f"Shop 1: {' '.join([item.name for item in game_state.shops[1].items]):8} + Q: {queue_state(game_state.shops[1])}")
 
 def run_player_turn_until(game_state: GameState, player_id: int):
 	player_state = game_state.player_states[player_id]
@@ -517,8 +529,18 @@ def play_game_until_decision(game_state: GameState) -> None:
 			pass
 		elif game_state.state in DECISION_STATES:
 			pass
+		elif game_state.state == GameStep.STATE_END_TURN:
+			pass
 		else:
-			assert False, "Invalid game state"
+			assert False, f"Invalid game state {game_state.state}"
+
+		if game_state.state == GameStep.STATE_END_TURN:
+			if game_state.turn == AI_PLAYER_ID:
+				game_state.turn = NPC_PLAYER_ID
+			else:
+				game_state.turn = AI_PLAYER_ID
+			game_state.turn_counter += 1
+			game_state.state = GameStep.STATE_SHOP_0
 
 	def can_player_continue(game_state: GameState, player_id: int) -> bool:
 		if sum(game_state.player_states[player_id].deck.values()) > 0:
@@ -545,12 +567,6 @@ def play_game_until_decision(game_state: GameState) -> None:
 			if game_state.state in DECISION_STATES:
 				return
 
-			if game_state.state == GameStep.STATE_END_TURN:
-				game_state.state = GameStep.STATE_SHOP_0
-				game_state.turn = NPC_PLAYER_ID
-				game_state.turn_counter += 1
-				break
-
 		# Run NPC player
 		while True and game_state.turn == NPC_PLAYER_ID:
 			game_step(game_state, NPC_PLAYER_ID)
@@ -564,12 +580,6 @@ def play_game_until_decision(game_state: GameState) -> None:
 
 			if game_state.state in DECISION_STATES:
 				return
-
-			if game_state.state == GameStep.STATE_END_TURN:
-				game_state.state = GameStep.STATE_SHOP_0
-				game_state.turn = AI_PLAYER_ID
-				game_state.turn_counter += 1
-				break
 
 
 def play_game_until_decision_one_player(game_state: GameState, player: Player) -> None:
@@ -587,16 +597,12 @@ def play_game_until_decision_one_player(game_state: GameState, player: Player) -
 		else:
 			assert False, "Player turn is invalid"
 
-		if game_state.state in DECISION_STATES:
-			set_decision(game_state, player.run_player_decision(game_state, AI_PLAYER_ID), AI_PLAYER_ID)
-			continue
-
-		return
-
 # This is a helper for training the model
 def play_game_until_decision_one_player_that_is_not_a_shop_decision(game_state: GameState, npc: Player) -> None:
 	while True:
 		play_game_until_decision_one_player(game_state, npc)
+
+		assert game_state.turn == AI_PLAYER_ID, "AI player should play"
 
 		if game_state.state == GameStep.STATE_SHOP_0_DECISION or game_state.state == GameStep.STATE_SHOP_1_DECISION:
 			set_decision(game_state, npc.run_player_decision(game_state, AI_PLAYER_ID), AI_PLAYER_ID)
@@ -612,16 +618,26 @@ def play_game_until_decision_one_player_that_is_not_a_shop_decision(game_state: 
 
 		return
 
-def play_game(game_state: GameState, player0: Player, player_1: Player):
+def play_game(game_state: GameState, player0: Player, player_1: Player, verbose: bool = False) -> None:
 	while not game_is_over(game_state):
 		play_game_until_decision(game_state)
 
+		if verbose:
+			print_game_state(game_state)
+
 		if game_state.turn == AI_PLAYER_ID:
-			set_decision(game_state, player0.run_player_decision(game_state, AI_PLAYER_ID), AI_PLAYER_ID)
+			decision = player0.run_player_decision(game_state, AI_PLAYER_ID)
+			set_decision(game_state, decision, AI_PLAYER_ID)
 		elif game_state.turn == NPC_PLAYER_ID:
-			set_decision(game_state, player_1.run_player_decision(game_state, NPC_PLAYER_ID), NPC_PLAYER_ID)
+			decision = player_1.run_player_decision(game_state, NPC_PLAYER_ID)
+			set_decision(game_state, decision, NPC_PLAYER_ID)
 		else:
 			assert False, "Player turn is invalid"
+
+		if verbose:
+			print()
+			print(f"Decision: {decision} - Player {game_state.turn}")
+			print()
 
 def set_decision(game_state: GameState, decision: Optional[PlayerDecision], player_id: int) -> None:
 	if game_state.state == GameStep.STATE_START:
@@ -684,7 +700,7 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 			if player_state.hand[decision.card_type] == 0:
 				del player_state.hand[decision.card_type]
 
-			game_state.shops[player_id].queue.append(QueueItem(decision.card_type, decision.count, player_id))
+			game_state.shops[decision.queue_id].queue.append(QueueItem(decision.card_type, decision.count, player_id))
 		else:
 			game_state.state = GameStep.STATE_ERROR
 			return
@@ -692,8 +708,11 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 		if game_state.state == GameStep.STATE_TURN_0:
 			game_state.state = GameStep.STATE_TURN_1
 		elif game_state.state == GameStep.STATE_TURN_1:
-			game_state.state = GameStep.STATE_TURN_2
-		elif game_state.state == GameStep.STATE_TURN_2:
+
+		# TODO: Implement GameStep.STATE_TURN_2
+		# 	game_state.state = GameStep.STATE_TURN_2
+		# elif game_state.state == GameStep.STATE_TURN_2:
+
 			game_state.state = GameStep.STATE_END_TURN
 		else:
 			assert False, "Invalid game state"
@@ -705,8 +724,7 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 	elif game_state.state == GameStep.STATE_ERROR:
 		pass
 	else:
-
-		assert False, "Invalid game state"
+		assert False, f"Invalid game state {game_state.state}"
 
 class RandomPlayer(Player):
 
