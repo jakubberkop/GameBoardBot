@@ -138,11 +138,12 @@ def to_one_hot(value: int, count: int) -> List[int]:
 	return [1 if value == i else 0 for i in range(count)]
 
 class PlayerDecision:
-	DRAW_CARD = 0
-	PLACE_CARD_IN_QUEUE = 1
-	SHOP_DECISION = 2 # Shop decision is commented for now
+	class Type(IntEnum):
+		DRAW_CARD = 0
+		PLACE_CARD_IN_QUEUE = 1
+		SHOP_DECISION = 2 # Shop decision is commented for now
 
-	type: int
+	type: Type
 
 	# PLACE_CARD_IN_QUEUE
 	card_type: Optional[CardType] = None
@@ -160,21 +161,21 @@ class PlayerDecision:
 		self.queue_id = queue_id
 
 	def isValid(self):
-		if self.type == PlayerDecision.DRAW_CARD:
+		if self.type == PlayerDecision.Type.DRAW_CARD:
 			return True
-		elif self.type == PlayerDecision.PLACE_CARD_IN_QUEUE:
+		elif self.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
 			return self.card_type is not None and self.count is not None
-		# elif self.type == PlayerDecision.SHOP_DECISION:
+		# elif self.type == PlayerDecision.Type.SHOP_DECISION:
 		# 	return self.item_id is not None
 		else:
 			return False
 
 	def to_state_array(self) -> List[int]:
-		if self.type == PlayerDecision.DRAW_CARD:
+		if self.type == PlayerDecision.Type.DRAW_CARD:
 			encoded_type = 0
-		elif self.type == PlayerDecision.PLACE_CARD_IN_QUEUE:
+		elif self.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
 			encoded_type = 1 + self.card_type.id
-		# elif self.type == PlayerDecision.SHOP_DECISION:
+		# elif self.type == PlayerDecision.Type.SHOP_DECISION:
 		# 	encoded_type = 1 + len(CARD_INFO)
 		else:
 			assert False
@@ -191,8 +192,8 @@ class PlayerDecision:
 			assert False, "Invalid state type"
 
 
-		if action_type == PlayerDecision.DRAW_CARD:
-			return PlayerDecision(PlayerDecision.DRAW_CARD)
+		if action_type == PlayerDecision.Type.DRAW_CARD:
+			return PlayerDecision(PlayerDecision.Type.DRAW_CARD)
 		elif 0 < action_type and action_type <= len(CARD_INFO):
 			card_type_id = action_type - 1
 			card_type = CardType.from_id(card_type_id)
@@ -206,12 +207,12 @@ class PlayerDecision:
 			queue_id = 0
 
 
-			return PlayerDecision(PlayerDecision.PLACE_CARD_IN_QUEUE, card_type, card_count, queue_id=queue_id)
+			return PlayerDecision(PlayerDecision.Type.PLACE_CARD_IN_QUEUE, card_type, card_count, queue_id=queue_id)
 
 		# TODO: Shop decision is commented for now
-		# elif action_type == PlayerDecision.SHOP_DECISION:
+		# elif action_type == PlayerDecision.Type.SHOP_DECISION:
 		# 	item_id = int(state[-1])
-		# 	return PlayerDecision(PlayerDecision.SHOP_DECISION, item_id=item_id)
+		# 	return PlayerDecision(PlayerDecision.Type.SHOP_DECISION, item_id=item_id)
 
 		else:
 			assert False, "Invalid action type"
@@ -220,27 +221,27 @@ class PlayerDecision:
 		if self.type != other.type:
 			return False
 		
-		if self.type == PlayerDecision.DRAW_CARD:
+		if self.type == PlayerDecision.Type.DRAW_CARD:
 			return True
 		
-		if self.type == PlayerDecision.PLACE_CARD_IN_QUEUE:
+		if self.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
 			return self.card_type == other.card_type and self.count == other.count
 		
 		# TODO: Shop decision is commented for now
-		# if self.type == PlayerDecision.SHOP_DECISION:
+		# if self.type == PlayerDecision.Type.SHOP_DECISION:
 		# 	return self.item_id == other.item_id
 		
 		assert False
 
-	def __repr__(self):
-		if self.type == PlayerDecision.DRAW_CARD:
+	def __str__(self):
+		if self.type == PlayerDecision.Type.DRAW_CARD:
 			return f"Draw card"
-		elif self.type == PlayerDecision.PLACE_CARD_IN_QUEUE:
+		elif self.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
 			return f"Place {self.card_type.name}x{self.count} in queue {self.queue_id}"
 		
 		# TODO: Shop decision is commented for now
-		# elif self.type == PlayerDecision.SHOP_DECISION:
-		# 	return f"Place item {self.item_id} in shop"
+		elif self.type == PlayerDecision.Type.SHOP_DECISION:
+			return f"Place item {self.item_id} in shop"
 		else:
 			assert False
 
@@ -422,9 +423,9 @@ def player_can_play(player_state: PlayerState) -> bool:
 	return sum(player_state.deck.values()) > 0 or sum(player_state.hand.values()) > 0
 
 def decision_can_be_played(decision: PlayerDecision, player_state: PlayerState) -> bool:
-	if decision.type == PlayerDecision.DRAW_CARD:
+	if decision.type == PlayerDecision.Type.DRAW_CARD:
 		return sum(player_state.deck.values()) > 0
-	elif decision.type == PlayerDecision.PLACE_CARD_IN_QUEUE:
+	elif decision.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
 		return sum(player_state.hand.values()) > 0
 	else:
 		return False
@@ -461,10 +462,10 @@ def run_player_turn_until(game_state: GameState, player_id: int):
 	player_state = game_state.player_states[player_id]
 
 	# def execute_decision(player_decision: PlayerDecision):
-	# 	if player_decision.type == PlayerDecision.DRAW_CARD:
+	# 	if player_decision.type == PlayerDecision.Type.DRAW_CARD:
 	# 		draw_card = draw_from_deck(player_state.deck)
 	# 		player_state.hand[draw_card] += 1
-	# 	elif player_decision.type == PlayerDecision.PLACE_CARD_IN_QUEUE:
+	# 	elif player_decision.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
 	# 		assert player_decision.count
 	# 		assert player_decision.card_type
 
@@ -601,11 +602,11 @@ def play_game_until_decision_one_player_that_is_not_a_shop_decision(game_state: 
 			set_decision(game_state, npc.run_player_decision(game_state, AI_PLAYER_ID), AI_PLAYER_ID)
 			continue
 
-		if game_state.state == GameStep.STATE_TURN_0 or game_state.state == GameStep.STATE_TURN_1 or game_state.state == GameStep.STATE_TURN_2:
+		if game_state.state == GameStep.STATE_TURN_0 or game_state.state == GameStep.STATE_TURN_1: # TODO: Implement or game_state.state == GameStep.STATE_TURN_2:
 			# And we cannot do anything other than draw a card
 			# This is so that we make model training easier
 			if sum(game_state.player_states[AI_PLAYER_ID].hand.values()) == 0:
-				set_decision(game_state, PlayerDecision(PlayerDecision.DRAW_CARD), AI_PLAYER_ID)
+				set_decision(game_state, PlayerDecision(PlayerDecision.Type.DRAW_CARD), AI_PLAYER_ID)
 				continue
 			return
 
@@ -631,7 +632,7 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 			game_state.state = GameStep.STATE_ERROR
 			return
 
-		if decision.type != PlayerDecision.SHOP_DECISION:
+		if decision.type != PlayerDecision.Type.SHOP_DECISION:
 			game_state.state = GameStep.STATE_ERROR
 			return
 
@@ -647,7 +648,7 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 			game_state.state = GameStep.STATE_ERROR
 			return
 
-		if decision.type != PlayerDecision.SHOP_DECISION:
+		if decision.type != PlayerDecision.Type.SHOP_DECISION:
 			game_state.state = GameStep.STATE_ERROR
 			return
 
@@ -665,7 +666,7 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 
 		player_state = game_state.player_states[player_id]
 
-		if decision.type == PlayerDecision.DRAW_CARD:
+		if decision.type == PlayerDecision.Type.DRAW_CARD:
 			if sum(player_state.deck.values()) == 0:
 				game_state.state = GameStep.STATE_ERROR
 				return
@@ -673,7 +674,7 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 			draw_card = draw_from_deck(player_state.deck)
 			player_state.hand[draw_card] += 1
 
-		elif decision.type == PlayerDecision.PLACE_CARD_IN_QUEUE:
+		elif decision.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
 			if player_state.hand[decision.card_type] < decision.count:
 				game_state.state = GameStep.STATE_ERROR
 				return
@@ -720,27 +721,27 @@ class RandomPlayer(Player):
 				shop_id = 1
 
 			shop = game_state.shops[shop_id]
-			return PlayerDecision(PlayerDecision.SHOP_DECISION, item_id=random.randint(0, len(shop.items) - 1))
+			return PlayerDecision(PlayerDecision.Type.SHOP_DECISION, item_id=random.randint(0, len(shop.items) - 1))
 
 		possible_decision_types: List[int] = []
 
 		if sum(game_state.player_states[player_id].deck.values()) > 0:
-			possible_decision_types.append(PlayerDecision.DRAW_CARD)
+			possible_decision_types.append(PlayerDecision.Type.DRAW_CARD)
 
 		if sum(game_state.player_states[player_id].hand.values()) > 0:
-			possible_decision_types.append(PlayerDecision.PLACE_CARD_IN_QUEUE)
+			possible_decision_types.append(PlayerDecision.Type.PLACE_CARD_IN_QUEUE)
 
 		assert len(possible_decision_types) > 0, "Player cannot play"
 
 		type = random.choice(possible_decision_types)
 
-		if type == PlayerDecision.DRAW_CARD:
-			return PlayerDecision(PlayerDecision.DRAW_CARD)
+		if type == PlayerDecision.Type.DRAW_CARD:
+			return PlayerDecision(PlayerDecision.Type.DRAW_CARD)
 		else:
 			player_state = game_state.player_states[player_id]
 			card_type = random.choice(list(player_state.hand.keys()))
 			count = random.randint(1, player_state.hand[card_type])
-			return PlayerDecision(PlayerDecision.PLACE_CARD_IN_QUEUE, card_type, count, queue_id=random.randint(0, 1))
+			return PlayerDecision(PlayerDecision.Type.PLACE_CARD_IN_QUEUE, card_type, count, queue_id=random.randint(0, 1))
 
 import time
 def timeit(func: Callable):
