@@ -6,7 +6,7 @@ import numpy as np
 
 Scores = List[int]
 
-def evaluate_player_pair(player0: Player, player1: Player, game_count: int = 1000) -> Scores:
+def evaluate_player_pair(player0: Player, player1: Player, game_count: int) -> Scores:
 	scores: List[int] = []
 
 	for _ in range(game_count):
@@ -19,7 +19,7 @@ def evaluate_player_pair(player0: Player, player1: Player, game_count: int = 100
 
 	return scores
 
-def evaluate_players(players: Sequence[Player], game_count: int = 100):
+def evaluate_players(players: Sequence[Player], game_count: int = 1000):
 
 	scores: List[List[Scores]] = []
 
@@ -35,7 +35,12 @@ def evaluate_players(players: Sequence[Player], game_count: int = 100):
 	for i, a in enumerate(players):
 		print(a.name())
 		for j, b in enumerate(players):
-			print(f"  {b.name()}: {np.mean(scores[i][j])}")
+			player_0_win_count = np.sum(np.array(scores[i][j]) > 0)
+			player_1_win_count = len(scores[i][j]) - player_0_win_count
+
+			ratio = player_0_win_count / len(scores[i][j])
+
+			print(f"  {b.name():20}: {ratio * 100:2.0f}%    {player_0_win_count}-{player_1_win_count}")
 
 
 class RandomPlayerCopy(RandomPlayer):
