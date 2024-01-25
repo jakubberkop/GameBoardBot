@@ -1,9 +1,14 @@
 import gymnasium as gym
 import numpy as np
 
-from game import AI_PLAYER_ID, GameStep, PlayerDecision, get_game_score, initialize_game_state,  RandomPlayer, play_game_until_decision_one_player_that_is_not_a_shop_decision, set_decision
+from game import AI_PLAYER_ID, GameStep, PlayerDecision, game_is_over, get_game_score, get_legal_moves, initialize_game_state,  RandomPlayer, play_game_until_decision_one_player_that_is_not_a_shop_decision, print_game_state, set_decision
 
 class GameEnv(gym.Env):
+
+	metadata = {
+        "render_modes": ["human"],
+        "render_fps": 50,
+    }
 
 	def __init__(self, render_mode=None, size=5):
 		self.game_state = initialize_game_state()
@@ -31,10 +36,21 @@ class GameEnv(gym.Env):
 
 	def get_reward(self):
 		if self.game_state.state == GameStep.STATE_ERROR:
-			self.reward = -10000
-			return self.reward
+			assert False, "Invalid action"
 
-		return get_game_score(self.game_state) * 100 + self.game_state.turn_counter
+		reward = 0
+
+		# if self.game_state.state == GameStep.STATE_END or game_is_over(self.game_state):
+		# 	reward = get_game_score(self.game_state) * 100
+		# else:
+		reward = get_game_score(self.game_state)
+
+		# player_state = self.game_state.player_states[AI_PLAYER_ID]
+		# card_count = sum(player_state.hand.values())
+
+		# reward -= self.game_state.turn_counter
+
+		return reward
 
 	def reset(self, seed=None, options=None):
 		# We need the following line to seed self.np_random
@@ -50,7 +66,10 @@ class GameEnv(gym.Env):
 		if self.render_mode == "human":
 			self._render_frame()
 
-		return observation, dict()
+		return observation, {"legal_moves": get_legal_moves(self.game_state, AI_PLAYER_ID)}
+
+	def _render_frame(self):
+		print_game_state(self.game_state)
 
 	def step(self, action: np.ndarray):
 		play_game_until_decision_one_player_that_is_not_a_shop_decision(self.game_state, RandomPlayer())
@@ -62,9 +81,12 @@ class GameEnv(gym.Env):
 		else:
 			assert False, "Invalid action"
 
+		if self.render_mode == "human":
+			print("Decision: ", decision)
+
 		play_game_until_decision_one_player_that_is_not_a_shop_decision(self.game_state, RandomPlayer())
 
-		terminated = self.game_state.end_game or self.game_state.state == GameStep.STATE_ERROR or self.game_state.state == GameStep.STATE_END
+		terminated = self.game_state.end_game or self.game_state.state == GameStep.STATE_ERROR or self.game_state.state == GameStep.STATE_END or game_is_over(self.game_state) #TODO: This is messy
 
 		reward = self.get_reward()
 
@@ -73,5 +95,4 @@ class GameEnv(gym.Env):
 		if self.render_mode == "human":
 			self._render_frame()
 
-
-		return observation, reward, terminated, False, dict()
+		return observation, reward, terminated, False, {"legal_moves": get_legal_moves(self.game_state, AI_PLAYER_ID)}

@@ -6,6 +6,7 @@ from typing import Any, Callable, DefaultDict, Dict, List, Optional, Set, Tuple
 
 import torch
 import tqdm
+import numpy as np
 
 # from pytracy import *
 # set_tracing_mode(TracingMode.All)
@@ -114,8 +115,7 @@ class ShopState:
 
 	def get_player_score(self, player_id: int) -> int:
 		# TODO: Implement other scoring rules
-		filtered_queue = [queue_item for queue_item in self.queue if queue_item.player_id == player_id]
-		score = sum(queue_item.card_type.value * queue_item.count for queue_item in filtered_queue)
+		score = sum(queue_item.card_type.value * queue_item.count for queue_item in self.queue if queue_item.player_id == player_id)
 
 		if self.limbo_item and self.limbo_item.player_id == player_id:
 			score -= self.limbo_item.item.value
@@ -301,6 +301,7 @@ class GameState:
 
 	def __str__(self):
 		return f""" {self.state}
+
 Player 0: {self.player_states[0]}
 Player 1: {self.player_states[1]}
 
@@ -542,6 +543,11 @@ def play_game_until_decision(game_state: GameState) -> None:
 			game_state.turn_counter += 1
 			game_state.state = GameStep.STATE_SHOP_0
 
+		if game_is_over(game_state):
+			game_state.state = GameStep.STATE_END
+			game_state.end_game = True
+			return
+
 	def can_player_continue(game_state: GameState, player_id: int) -> bool:
 		if sum(game_state.player_states[player_id].deck.values()) > 0:
 			return True
@@ -602,6 +608,9 @@ def play_game_until_decision_one_player_that_is_not_a_shop_decision(game_state: 
 	while True:
 		play_game_until_decision_one_player(game_state, npc)
 
+		if game_is_over(game_state):
+			return
+
 		assert game_state.turn == AI_PLAYER_ID, "AI player should play"
 
 		if game_state.state == GameStep.STATE_SHOP_0_DECISION or game_state.state == GameStep.STATE_SHOP_1_DECISION:
@@ -644,10 +653,6 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 		pass
 
 	elif game_state.state == GameStep.STATE_SHOP_0_DECISION:
-		if decision is None:
-			game_state.state = GameStep.STATE_ERROR
-			return
-
 		if decision.type != PlayerDecision.Type.SHOP_DECISION:
 			game_state.state = GameStep.STATE_ERROR
 			return
@@ -660,10 +665,6 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 		return
 
 	elif game_state.state == GameStep.STATE_SHOP_1_DECISION:
-		if decision is None:
-			game_state.state = GameStep.STATE_ERROR
-			return
-
 		if decision.type != PlayerDecision.Type.SHOP_DECISION:
 			game_state.state = GameStep.STATE_ERROR
 			return
@@ -676,10 +677,6 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 		return
 
 	elif game_state.state == GameStep.STATE_TURN_0 or game_state.state == GameStep.STATE_TURN_1:
-		if decision is None:
-			game_state.state = GameStep.STATE_ERROR
-			return
-
 		player_state = game_state.player_states[player_id]
 
 		if decision.type == PlayerDecision.Type.DRAW_CARD:
@@ -714,17 +711,42 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 		# elif game_state.state == GameStep.STATE_TURN_2:
 
 			game_state.state = GameStep.STATE_END_TURN
+
+			# # Turn change logic
+			# if game_state.turn == AI_PLAYER_ID:
+			# 	game_state.turn = NPC_PLAYER_ID
+			# else:
+			# 	game_state.turn = AI_PLAYER_ID
+			# game_state.turn_counter += 1
+			# game_state.state = GameStep.STATE_SHOP_0
+
 		else:
 			assert False, "Invalid game state"
 
 		return
 
 	elif game_state.state == GameStep.STATE_END:
-		pass
+		return
 	elif game_state.state == GameStep.STATE_ERROR:
-		pass
+		return
 	else:
 		assert False, f"Invalid game state {game_state.state}"
+
+def get_legal_moves(game_state: GameState, player_id: int) -> np.ndarray:
+	actions = np.zeros(1 + len(CARD_INFO), dtype=np.int8)
+
+	if game_state.state == GameStep.STATE_TURN_0 or game_state.state == GameStep.STATE_TURN_1:
+		# Can we draw a card?
+		actions[0] = sum(game_state.player_states[player_id].deck.values()) > 0
+
+		# Can we place a card in the queue?
+		for i, (card_type, _) in enumerate(CARD_INFO):
+			actions[i+1] = game_state.player_states[player_id].hand.get(card_type, 0) > 0
+
+	# TODO: Implement GameStep.STATE_TURN_2
+	# TODO: Implement shop decision
+
+	return actions
 
 class RandomPlayer(Player):
 

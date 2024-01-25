@@ -54,8 +54,11 @@ def main():
 		RandomPlayer(),
 		RandomPlayerCopy(),
 	]
-
+	import time
+	a = time.time()
 	evaluate_players(players)
+	b = time.time()
+	print(b-a)
 
 
 if __name__ == "__main__":
