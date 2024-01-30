@@ -1,0 +1,77 @@
+commit 3556022b19b5ed805e1fdf50ef4b1a7841b43d8c
+Author: Jakub Berkop <jakub.berkop@gmail.com>
+Date:   Thu Jan 25 23:05:16 2024 +0100
+
+    AA
+
+commit 930dfbf5a803716f31fe532954df1be47ab40e4b
+Author: Jakub Berkop <jakub.berkop@gmail.com>
+Date:   Tue Jan 23 21:24:00 2024 +0100
+
+    Better evaluation output
+
+commit cbf7df0b964659d292e3ec66b8655fb18cd1285d
+Author: Jakub Berkop <jakub.berkop@gmail.com>
+Date:   Tue Jan 23 21:18:26 2024 +0100
+
+    Fixed game
+
+commit 9909f62dde8a6a4d9d2ec1b554d2c246ae868d0c
+Author: Jakub Berkop <jakub.berkop@gmail.com>
+Date:   Tue Jan 23 21:16:34 2024 +0100
+
+    Made PlayerDecision.Type to be a IntEnum
+
+commit a4e4d6f2d59a48d7b6e4485229b9cb3d88b40012
+Author: Jakub Berkop <jakub.berkop@gmail.com>
+Date:   Mon Jan 22 20:42:25 2024 +0100
+
+    Fix
+
+commit 3331ca23cb32fa772649ad6dbd58266584309d5e
+Author: Jakub Berkop <jakub.berkop@gmail.com>
+Date:   Mon Jan 22 20:42:12 2024 +0100
+
+    Made GameStep be an Enum
+
+commit c6d9090a241ae9ddc4304edbceedb2f882b6f3f5
+Author: Jakub Berkop <jakub.berkop@gmail.com>
+Date:   Sun Jan 21 21:43:28 2024 +0100
+
+    Cleanup
+
+commit c756126c21af09a14adb570bd34c50a8a5433d28
+Author: Jakub Berkop <jakub.berkop@gmail.com>
+Date:   Thu Jan 18 19:17:09 2024 +0100
+
+    New weights
+
+commit 77d46361d4c7bfc14b0ffdae333db21bf0ea0bc5
+Author: Jakub Berkop <jakub.berkop@gmail.com>
+Date:   Thu Jan 18 19:15:38 2024 +0100
+
+    A
+
+commit 684e655733389f32c43366ce0807e4caca30bbc7
+Author: Jakub Berkop <jakub.berkop@gmail.com>
+Date:   Tue Jan 16 22:31:54 2024 +0100
+
+    First working something
+
+commit 3a371453116a35ae7630a18765bb4abc9ad9905c
+Author: Jakub Berkop <jakub.berkop@gmail.com>
+Date:   Tue Jan 16 22:31:46 2024 +0100
+
+    A
+
+commit 7f390f7d9446c83fba248a584f881eb587f766bb
+Author: Jakub Berkop <jakub.berkop@gmail.com>
+Date:   Sat Jan 13 00:24:51 2024 +0100
+
+    AA
+
+commit 495ed65f9673498f280f38941ee8c7c74eccd0af
+Author: Jakub Berkop <jakub.berkop@gmail.com>
+Date:   Mon Jan 8 21:30:21 2024 +0100
+
+    Initial

@@ -21,10 +21,10 @@
 			"justMyCode": true
 		},
 		{
-			"name": "Python: train.py",
+			"name": "Python: AA.py",
 			"type": "python",
 			"request": "launch",
-			"program": "train.py",
+			"program": "AA.py",
 			"console": "integratedTerminal",
 			"justMyCode": true
 		}

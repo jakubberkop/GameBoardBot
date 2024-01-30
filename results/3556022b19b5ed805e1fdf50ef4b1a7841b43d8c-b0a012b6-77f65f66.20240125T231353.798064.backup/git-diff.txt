@@ -1,0 +1,28 @@
+diff --git a/.vscode/launch.json b/.vscode/launch.json
+index 4864f3d..2661aaf 100644
+--- a/.vscode/launch.json
++++ b/.vscode/launch.json
+@@ -21,10 +21,10 @@
+ 			"justMyCode": true
+ 		},
+ 		{
+-			"name": "Python: train.py",
++			"name": "Python: AA.py",
+ 			"type": "python",
+ 			"request": "launch",
+-			"program": "train.py",
++			"program": "AA.py",
+ 			"console": "integratedTerminal",
+ 			"justMyCode": true
+ 		}
+diff --git a/game_env.py b/game_env.py
+index 0aae8d8..0276163 100644
+--- a/game_env.py
++++ b/game_env.py
+@@ -1,4 +1,5 @@
+-import gymnasium as gym
++# import gymnasium as gym
++import gym
+ import numpy as np
+ 
+ from game import AI_PLAYER_ID, GameStep, PlayerDecision, game_is_over, get_game_score, get_legal_moves, initialize_game_state,  RandomPlayer, play_game_until_decision_one_player_that_is_not_a_shop_decision, print_game_state, set_decision

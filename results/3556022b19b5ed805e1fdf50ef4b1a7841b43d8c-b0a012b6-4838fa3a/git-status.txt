@@ -1,0 +1,30 @@
+On branch master
+Your branch is ahead of 'origin/master' by 6 commits.
+  (use "git push" to publish your local commits)
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   .vscode/launch.json
+	modified:   game_env.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	prfl.py
+	readme.md
+	results/2024-01-22_22-21-44/
+	results/2024-01-22_22-37-21/
+	results/2024-01-22_23-02-19/
+	results/2024-01-25_19-42-52/
+	results/3556022b19b5ed805e1fdf50ef4b1a7841b43d8c-85d5d7bc-4838fa3a/
+	results/3556022b19b5ed805e1fdf50ef4b1a7841b43d8c-b0a012b6-4838fa3a.20240125T231126.448957.backup/
+	results/3556022b19b5ed805e1fdf50ef4b1a7841b43d8c-b0a012b6-4838fa3a/
+	results/930dfbf5a803716f31fe532954df1be47ab40e4b-e034b823-4838fa3a/
+	results/930dfbf5a803716f31fe532954df1be47ab40e4b-e034b823-6c625967.20240125T230352.787741.backup/
+	results/930dfbf5a803716f31fe532954df1be47ab40e4b-e034b823-6c625967.20240125T230436.804138.backup/
+	results/930dfbf5a803716f31fe532954df1be47ab40e4b-e034b823-6c625967.20240125T230454.431942.backup/
+	results/930dfbf5a803716f31fe532954df1be47ab40e4b-e034b823-6c625967/
+	runs/
+	snake-ga/
+
+no changes added to commit (use "git add" and/or "git commit -a")

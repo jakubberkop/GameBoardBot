@@ -2,7 +2,9 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from numbers import Number
 import random
+from re import S
 from typing import Any, Callable, DefaultDict, Dict, List, Optional, Set, Tuple
+from regex import R
 
 import torch
 import tqdm
@@ -92,6 +94,16 @@ class PlayerState:
 
 		return state
 
+	STATE_SIZE = 2 + len(CARD_INFO)
+
+	def to_state_array_fast(self, array, index, private: bool) -> None:
+		array[index] = self.points
+		array[index+1] = sum(self.deck.values())
+
+		for i, (card_type, _) in enumerate(CARD_INFO):
+			array[index+2+i] = self.hand.get(card_type, 0)
+		
+
 	def __str__(self):
 		return f"Points: {self.points} Hand: {self.hand}"
 
@@ -112,6 +124,10 @@ class ShopState:
 	queue: List[QueueItem] = field(default_factory=list)
 
 	limbo_item: Optional[LimboItem] = None
+	STATE_SIZE: int = 0
+
+	def __post_init__(self):
+		self.STATE_SIZE = len(self.to_state_array(0))
 
 	def get_player_score(self, player_id: int) -> int:
 		# TODO: Implement other scoring rules
@@ -131,9 +147,73 @@ class ShopState:
 
 	def to_state_array(self, player_id: int) -> List[int]:
 		state: List[int] = []
-		# TODO
+
+		item_count = len(self.items)
+
+		if item_count == 2:
+			state.append(self.items[0].value)
+			state.append(self.items[1].value)
+			state.append(self.limbo_item.item.value if self.limbo_item else 0)
+		elif item_count == 1:
+			state.append(self.items[0].value)
+			state.append(0)
+			state.append(self.limbo_item.item.value if self.limbo_item else 0)
+		else:
+			state.append(0)
+			state.append(0)
+			state.append(self.limbo_item.item.value if self.limbo_item else 0)
+
+		# player_id
+		for card_type, _ in CARD_INFO:
+			card_count = sum(queue_item.count for queue_item in self.queue if queue_item.card_type == card_type and queue_item.player_id == player_id)
+			state.append(card_count)
+
+		# opponent_id
+		for card_type, _ in CARD_INFO:
+			card_count = sum(queue_item.count for queue_item in self.queue if queue_item.card_type == card_type and queue_item.player_id != player_id)
+			state.append(card_count)
+
 		return state
 	
+	def to_state_array_fast(self, state, index, player_id: int) -> None:
+		# slow_state = self.to_state_array(player_id)
+		# start_index = index
+		# for i in range(len(slow_state)):
+		# 	state[index + i] = slow_state[i]
+
+		item_count = len(self.items)
+
+		if item_count == 2:
+			state[index + 0] = self.items[0].value
+			state[index + 1] = self.items[1].value
+			state[index + 2] = self.limbo_item.item.value if self.limbo_item else 0
+		elif item_count == 1:
+			state[index + 0] = self.items[0].value
+			state[index + 1] = 0
+			state[index + 2] = self.limbo_item.item.value if self.limbo_item else 0
+		else:
+			state[index + 0] = 0
+			state[index + 1] = 0
+			state[index + 2] = self.limbo_item.item.value if self.limbo_item else 0
+
+		index += 3
+
+		# player_id
+		for card_type, _ in CARD_INFO:
+			card_count = sum(queue_item.count for queue_item in self.queue if queue_item.card_type == card_type and queue_item.player_id == player_id)
+			state[index] = card_count
+			index += 1
+
+		# opponent_id
+		for card_type, _ in CARD_INFO:
+			card_count = sum(queue_item.count for queue_item in self.queue if queue_item.card_type == card_type and queue_item.player_id != player_id)
+			state[index] = card_count
+			index += 1
+
+		# # comppare to slow state
+		# for i in range(len(slow_state)):
+		# 	assert state[start_index + i] == slow_state[i]
+
 	def __str__(self):
 		item_str = " ".join([item.name for item in self.items])
 		queue_str = " ".join([f"{queue_item.card_type.name}x{queue_item.count}" for queue_item in self.queue])
@@ -186,6 +266,20 @@ class PlayerDecision:
 			assert False
 
 		return to_one_hot(encoded_type, 1 + len(CARD_INFO))
+
+	def to_state_array_fast(self) -> None:
+		if self.type == PlayerDecision.Type.DRAW_CARD:
+			encoded_type = 0
+		elif self.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
+			encoded_type = 1 + self.card_type.id
+		# elif self.type == PlayerDecision.Type.SHOP_DECISION:
+		# 	encoded_type = 1 + len(CARD_INFO)
+		else:
+			assert False
+
+		result = np.zeros(1 + len(CARD_INFO), dtype=np.float32)
+		result[encoded_type] = 1
+		return result
 
 	@staticmethod
 	def from_state_array(state: torch.Tensor | List[Number] | float | int) -> Optional["PlayerDecision"]:
@@ -289,15 +383,23 @@ class GameState:
 	turn_counter: int = 0
 
 	def to_state_array(self, player_id: int) -> List[int]:
-		state: List[int] = [self.state]
-		
-		state.extend(self.player_states[0].to_state_array(player_id == 0))
-		state.extend(self.player_states[1].to_state_array(player_id == 1))
+		state = np.zeros(1 + 2 * PlayerState.STATE_SIZE + 2 * self.shops[0].STATE_SIZE, dtype=np.float32)
+		state[0] = self.state
+
+		index = 0
+		for player_state in self.player_states:
+			player_state.to_state_array_fast(state, index, player_id == 0)
+			index += PlayerState.STATE_SIZE
 	
 		for shop in self.shops:
-			state += shop.to_state_array(player_id)
+			shop.to_state_array_fast(state, index, player_id)
+			index += ShopState.STATE_SIZE
 
 		return state
+	
+	def get_reward(self, player_id: int) -> int:
+		assert player_id == AI_PLAYER_ID
+		return get_game_score(self)
 
 	def __str__(self):
 		return f""" {self.state}
@@ -522,7 +624,10 @@ def play_game_until_decision(game_state: GameState) -> None:
 			pass
 		elif game_state.state == GameStep.STATE_TURN_2:
 			game_state.state = GameStep.STATE_END_TURN
-			pass
+			if game_is_over(game_state):
+				game_state.state = GameStep.STATE_END
+				game_state.end_game = True
+				return
 		elif game_state.state == GameStep.STATE_END:
 			pass
 		elif game_state.state == GameStep.STATE_ERROR:
@@ -712,6 +817,11 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 
 			game_state.state = GameStep.STATE_END_TURN
 
+			if game_is_over(game_state):
+				game_state.state = GameStep.STATE_END
+				game_state.end_game = True
+				return
+
 			# # Turn change logic
 			# if game_state.turn == AI_PLAYER_ID:
 			# 	game_state.turn = NPC_PLAYER_ID
@@ -733,7 +843,7 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 		assert False, f"Invalid game state {game_state.state}"
 
 def get_legal_moves(game_state: GameState, player_id: int) -> np.ndarray:
-	actions = np.zeros(1 + len(CARD_INFO), dtype=np.int8)
+	actions = np.zeros(1 + len(CARD_INFO), dtype=np.float32)
 
 	if game_state.state == GameStep.STATE_TURN_0 or game_state.state == GameStep.STATE_TURN_1:
 		# Can we draw a card?
