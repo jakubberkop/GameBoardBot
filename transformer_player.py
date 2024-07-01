@@ -6,7 +6,7 @@ import numpy as np
 
 from game import GameState, PlayerDecision, get_legal_moves, initialize_game_state, Player, ACTION_SIZE, STATE_SIZE
 
-weights_path = "results_dt/decision_transformer0"
+weights_path = "results_dt/decision_transformer1"
 device = "cuda"
 model: DecisionTransformerModel = DecisionTransformerModel.from_pretrained(weights_path).to(device)
 TARGET_RETURN = 20
@@ -19,18 +19,24 @@ class TransformerPlayer(Player):
 	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
 		self.states.append(game_state.to_state_array(player_id))
 		self.rewards.append(game_state.get_reward(player_id))
-
 		# TODO: Supply the rest of the data
 
 		BATCH_SIZE = 1
 		state_count = len(self.states)
 
-		states = torch.from_numpy(np.array(self.states, dtype=np.float32)).reshape(BATCH_SIZE, state_count, STATE_SIZE).to(device=device, dtype=torch.float32)
-		actions = torch.zeros((BATCH_SIZE, 1, ACTION_SIZE), device=device, dtype=torch.float32)
-		rewards = torch.zeros(BATCH_SIZE, 1, device=device, dtype=torch.float32)
-		target_return = torch.tensor(TARGET_RETURN, device=device, dtype=torch.float32).reshape(BATCH_SIZE, 1).to()
-		timesteps = torch.tensor(0, device=device, dtype=torch.long).reshape(BATCH_SIZE, 1)
-		attention_mask = torch.zeros(BATCH_SIZE, 1, device=device, dtype=torch.float32)
+		states  = torch.from_numpy(np.array(self.states)) .reshape(BATCH_SIZE, state_count, STATE_SIZE)
+		actions = torch.from_numpy(np.array(self.actions)).reshape(BATCH_SIZE, state_count, ACTION_SIZE)
+		rewards = torch.tensor(self.rewards).reshape(BATCH_SIZE, state_count)
+		target_return = torch.tensor(TARGET_RETURN).reshape(BATCH_SIZE, 1)
+		timesteps = torch.tensor([i for i in range(state_count)]).reshape(BATCH_SIZE, state_count)
+		attention_mask = torch.ones(BATCH_SIZE, state_count)
+
+		states = states                .to(device=device, dtype=torch.float32)
+		actions = actions              .to(device=device, dtype=torch.float32)
+		rewards = rewards              .to(device=device, dtype=torch.float32)
+		target_return = target_return  .to(device=device, dtype=torch.float32)
+		timesteps = timesteps          .to(device=device, dtype=torch.long)
+		attention_mask = attention_mask.to(device=device, dtype=torch.float32)
 
 		# forward pass	
 		with torch.no_grad():
@@ -61,7 +67,7 @@ class TransformerPlayer(Player):
 		return f"Transformer Player"
 	
 	def reset(self):
-		self.actions: List[float]       = []
+		self.actions: List[float]       = [np.zeros(ACTION_SIZE)]
 		self.states:  List[List[float]] = []
 		self.rewards: List[float]       = []
 		self.dones:   List[float]       = []

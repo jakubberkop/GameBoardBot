@@ -1,33 +1,18 @@
-# %%
 import datasets
-from transformers import DecisionTransformerConfig, DecisionTransformerModel, TrainingArguments, Trainer
+from transformers import DecisionTransformerConfig, DecisionTransformerModel, TrainingArguments, Trainer, TrainerCallback
 
 from game import PlayerDecision, initialize_game_state
 
 import numpy as np
-import random
 import torch
 
-# Initializing a DecisionTransformer configuration
+import pytracy
+# pytracy.set_tracing_mode(pytracy.TracingMode.All)
 
 state_size = len(initialize_game_state().to_state_array(0))
 action_size = len(PlayerDecision(0).to_state_array())
 
-# %%
 ds = datasets.load_from_disk("data/dataset3big")
-				
-ds["actions"][0][0].__len__()
-
-# %%
-# trainer.train()
-ds
-
-
-# %%
-dataset = datasets.load_dataset("edbeeching/decision_transformer_gym_replay", "halfcheetah-expert-v2")
-dataset['train'][0]["dones"].__len__()
-
-# %%
 split_ds = ds.train_test_split(test_size=0.1)
 
 # %%
@@ -64,7 +49,6 @@ class MyDataCollator:
 
         mask = np.ones_like(timesteps, dtype=np.float32)
 
-        k = 42
 
         s         = torch.tensor(s)
         a         = torch.tensor(a)
@@ -119,7 +103,9 @@ class TrainableDT(DecisionTransformerModel):
         action_preds = action_preds.reshape(-1, act_dim)[attention_mask.reshape(-1) > 0]
         action_targets = action_targets.reshape(-1, act_dim)[attention_mask.reshape(-1) > 0]
         
-        loss = torch.mean((action_preds - action_targets) ** 2)
+        # loss = torch.mean((action_preds - action_targets) ** 2)
+        loss_fun = torch.nn.CrossEntropyLoss()
+        loss = loss_fun(action_preds, action_targets)
 
         return {"loss": loss}
 
@@ -128,28 +114,31 @@ class TrainableDT(DecisionTransformerModel):
 
 model = TrainableDT(configuration)
 
+# Load the model from disk
+# model = TrainableDT.from_pretrained("results_dt/decision_transformer1")
+
 training_args = TrainingArguments(
     output_dir="results_dt/",
     learning_rate=2e-5,
-    per_device_train_batch_size=1024,
-    per_device_eval_batch_size=8,
-    num_train_epochs=2,
+    per_device_train_batch_size=1736,
+    per_device_eval_batch_size=1024,
+    num_train_epochs=4,
     remove_unused_columns=False
 )
-
-
 
 trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=split_ds["train"],
-    # eval_dataset=ds["test"],
+    eval_dataset=split_ds["test"],
     data_collator=collator,
-
+    # callbacks=[PrintLossCallback()]
 )
 
 trainer.train()
+# trainer.evaluate()
 
 
-# Save model
-trainer.save_model("results_dt/decision_transformer")
+
+# # Save model
+trainer.save_model("results_dt/decision_transformer1")

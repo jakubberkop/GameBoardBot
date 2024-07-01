@@ -1,12 +1,9 @@
 from dataclasses import dataclass, field
 from enum import IntEnum
-from numbers import Number
 import random
-from re import S
 from typing import Any, Callable, DefaultDict, Dict, List, Optional, Set, Tuple
-from regex import R
 
-import torch
+# import torch
 import tqdm
 import numpy as np
 
@@ -282,10 +279,10 @@ class PlayerDecision:
 		return result
 
 	@staticmethod
-	def from_state_array(state: torch.Tensor | List[Number] | float | int) -> Optional["PlayerDecision"]:
-		if type(state) == torch.Tensor or type(state) == List:
-			action_type = torch.argmax(torch.tensor(state))
-		elif type(state) == float or type(state) == int:
+	def from_state_array(state: float | int) -> Optional["PlayerDecision"]:
+		# if type(state) == torch.Tensor or type(state) == list:
+			# action_type = torch.argmax(torch.tensor(state))
+		if type(state) == float or type(state) == int:
 			action_type = int(state)
 		else:
 			assert False, "Invalid state type"
@@ -398,8 +395,10 @@ class GameState:
 		return state
 	
 	def get_reward(self, player_id: int) -> int:
-		assert player_id == AI_PLAYER_ID
-		return get_game_score(self)
+		if player_id == AI_PLAYER_ID:
+			return get_game_score(self)
+		else:
+			return -get_game_score(self)
 
 	def __str__(self):
 		return f""" {self.state}
@@ -418,6 +417,9 @@ class Player:
 
 	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
 		assert False, "Not implemented"
+
+	def reset(self) -> None:
+		pass
 
 @dataclass
 class GameRunner:
@@ -539,7 +541,7 @@ def decision_can_be_played(decision: PlayerDecision, player_state: PlayerState) 
 		return False
 
 def game_is_over(game_state: GameState) -> bool:
-	return any(not player_can_play(player_state) for player_state in game_state.player_states)
+	return any(not player_can_play(player_state) for player_state in game_state.player_states) or game_state.end_game or game_state.state in END_GAME_STATES
 
 def validate_game_state(game_state: GameState) -> bool:
 	player_points = sum([player_state.points for player_state in game_state.player_states])
@@ -560,8 +562,14 @@ def get_game_score(game_state: GameState) -> int:
 	return ai_player.points - npc_player.points
 
 def print_game_state(game_state: GameState) -> None:
-	print(f"Player 0: P: {game_state.player_states[0].points:3} D: {sum(game_state.player_states[0].deck.values()):2} H: {sum(game_state.player_states[0].hand.values()):2} {'<-' if game_state.turn == 0 else '' }")
-	print(f"Player 1: P: {game_state.player_states[1].points:3} D: {sum(game_state.player_states[1].deck.values()):2} H: {sum(game_state.player_states[1].hand.values()):2} {'<-' if game_state.turn == 1 else '' }")
+	def hand_state(hand: Dict[CardType, int]) -> str:
+		return ' '.join([f'{card_type.name}x{count}' for card_type, count in hand.items()])
+
+	player = game_state.player_states[0]
+	print(f"Player 0: P: {player.points:3} D: {sum(player.deck.values()):2} H: {sum(player.hand.values()):2} {hand_state(player.hand):20} {'<-----' if game_state.turn == 0 else '' }")
+
+	player = game_state.player_states[1]
+	print(f"Player 1: P: {player.points:3} D: {sum(player.deck.values()):2} H: {sum(player.hand.values()):2} {hand_state(player.hand):20} {'<-----' if game_state.turn == 1 else '' }")
 
 	def queue_state(shop: ShopState) -> str:
 		# TODO: Evaluate better
@@ -570,8 +578,8 @@ def print_game_state(game_state: GameState) -> None:
 
 		return f"{score} {cards}"
 
-	print(f"Shop 0: {' '.join([item.name for item in game_state.shops[0].items]):8} + Q: {queue_state(game_state.shops[0])}")
-	print(f"Shop 1: {' '.join([item.name for item in game_state.shops[1].items]):8} + Q: {queue_state(game_state.shops[1])}")
+	print(f"Shop 0: {' '.join([item.name for item in game_state.shops[0].items]):8} Q: {queue_state(game_state.shops[0])}")
+	print(f"Shop 1: {' '.join([item.name for item in game_state.shops[1].items]):8} Q: {queue_state(game_state.shops[1])}")
 
 def run_player_turn_until(game_state: GameState, player_id: int):
 	player_state = game_state.player_states[player_id]
@@ -732,21 +740,28 @@ def play_game_until_decision_one_player_that_is_not_a_shop_decision(game_state: 
 
 		return
 
-def play_game(game_state: GameState, player0: Player, player_1: Player, verbose: bool = False) -> None:
+def play_game(game_state: GameState, player0: Player, player_1: Player, verbose: bool = False, skip_shop_decisions: bool = False) -> None:
+	def run_shop_decision(game_state: GameState) -> None:
+		decision = RandomPlayer().run_player_decision(game_state, game_state.turn)
+		set_decision(game_state, decision, game_state.turn)
+
 	while not game_is_over(game_state):
 		play_game_until_decision(game_state)
 
 		if verbose:
 			print_game_state(game_state)
 
-		if game_state.turn == AI_PLAYER_ID:
-			decision = player0.run_player_decision(game_state, AI_PLAYER_ID)
-			set_decision(game_state, decision, AI_PLAYER_ID)
-		elif game_state.turn == NPC_PLAYER_ID:
-			decision = player_1.run_player_decision(game_state, NPC_PLAYER_ID)
-			set_decision(game_state, decision, NPC_PLAYER_ID)
+		if skip_shop_decisions and game_state.state in [GameStep.STATE_SHOP_0_DECISION, GameStep.STATE_SHOP_1_DECISION]:
+			run_shop_decision(game_state)
 		else:
-			assert False, "Player turn is invalid"
+			if game_state.turn == AI_PLAYER_ID:
+				decision = player0.run_player_decision(game_state, AI_PLAYER_ID)
+				set_decision(game_state, decision, AI_PLAYER_ID)
+			elif game_state.turn == NPC_PLAYER_ID:
+				decision = player_1.run_player_decision(game_state, NPC_PLAYER_ID)
+				set_decision(game_state, decision, NPC_PLAYER_ID)
+			else:
+				assert False, "Player turn is invalid"
 
 		if verbose:
 			print()
@@ -863,7 +878,7 @@ class RandomPlayer(Player):
 	def name(self) -> str:
 		return "RandomPlayer"
 
-	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
+	def run_player_decision(self, game_state: GameState, player_id: int, legal_moves: Optional[np.ndarray] = None) -> PlayerDecision:
 		if game_state.state in [GameStep.STATE_SHOP_0_DECISION, GameStep.STATE_SHOP_1_DECISION]:
 			if game_state.state == GameStep.STATE_SHOP_0_DECISION:
 				shop_id = 0
@@ -891,7 +906,9 @@ class RandomPlayer(Player):
 			player_state = game_state.player_states[player_id]
 			card_type = random.choice(list(player_state.hand.keys()))
 			count = random.randint(1, player_state.hand[card_type])
-			return PlayerDecision(PlayerDecision.Type.PLACE_CARD_IN_QUEUE, card_type, count, queue_id=random.randint(0, 1))
+			# queue_id = random.randint(0, 1) # TODO: Limit to 1 queue for now
+			queue_id = 0
+			return PlayerDecision(PlayerDecision.Type.PLACE_CARD_IN_QUEUE, card_type, count, queue_id=queue_id)
 
 import time
 def timeit(func: Callable):
@@ -920,3 +937,5 @@ if __name__ == "__main__":
 	print(f"Average score: {score / 1000}")
 
 
+STATE_SIZE = len(initialize_game_state().to_state_array(0))
+ACTION_SIZE = len(PlayerDecision(0).to_state_array())
