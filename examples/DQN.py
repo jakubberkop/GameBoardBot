@@ -11,7 +11,7 @@ import torch.nn.functional as F
 # import copy
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-import pytracy
+# import pytracy
 # pytracy.set_tracing_mode(pytracy.TracingMode.All)
 
 Transition = NamedTuple('Transition', [

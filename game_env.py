@@ -1,6 +1,7 @@
 # import gymnasium as gym
 import gym
 import numpy as np
+import numpy.typing as npt
 
 from game import AI_PLAYER_ID, GameStep, PlayerDecision, game_is_over, get_game_score, get_legal_moves, initialize_game_state,  RandomPlayer, play_game_until_decision_one_player_that_is_not_a_shop_decision, print_game_state, set_decision
 
@@ -17,7 +18,7 @@ class GameEnv(gym.Env):
 		state_len = len(self.game_state.to_state_array(AI_PLAYER_ID))
 
 		self.observation_space = gym.spaces.Box(low=0, high=30, shape=(state_len,), dtype=np.float32)
-		self.action_space = gym.spaces.Discrete(9)
+		self.action_space = gym.spaces.Discrete(len(PlayerDecision(0).to_state_array()))
 
 		assert render_mode is None or render_mode in self.metadata["render_modes"]
 		self.render_mode = render_mode
@@ -40,18 +41,6 @@ class GameEnv(gym.Env):
 			assert False, "Invalid action"
 
 		reward = 0
-
-		# if self.game_state.state == GameStep.STATE_END or game_is_over(self.game_state):
-		# 	reward = get_game_score(self.game_state) * 100
-		# else:
-		reward = get_game_score(self.game_state)
-
-		# player_state = self.game_state.player_states[AI_PLAYER_ID]
-		# card_count = sum(player_state.hand.values())
-
-		# reward -= self.game_state.turn_counter
-
-		return reward
 
 	def reset(self, seed=None, options=None):
 		# We need the following line to seed self.np_random
@@ -97,3 +86,14 @@ class GameEnv(gym.Env):
 			self._render_frame()
 
 		return observation, reward, terminated, False, {"legal_moves": get_legal_moves(self.game_state, AI_PLAYER_ID)}
+
+		return observation, reward, terminated, False, dict()
+	
+
+	def action_masks(self) -> npt.NDArray[np.float64]:
+		"""
+		Returns a boolean array of size 9, where each element is True if the action is valid, False otherwise.
+		"""
+		return get_legal_moves(self.game_state, AI_PLAYER_ID)
+	
+	

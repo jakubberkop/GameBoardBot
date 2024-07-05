@@ -4,7 +4,7 @@ import argparse
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-from DQN import DQNAgent
+from examples.DQN import DQNAgent
 from random import randint
 import random
 import statistics

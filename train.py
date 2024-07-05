@@ -4,7 +4,7 @@ import argparse
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-from DQN import DEVICE, DQNAgent
+from examples.DQN import DEVICE, DQNAgent
 import random
 import statistics
 import torch.optim as optim
