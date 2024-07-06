@@ -77,7 +77,7 @@ To read:
 - https://arxiv.org/abs/1910.04376
 - https://web.stanford.edu/class/aa228/reports/2019/final111.pdf
 - https://arxiv.org/abs/2311.17305
-- file:///home/jakub/Downloads/PhDThesis_Konrad_Godlewski_20221010.pdf
+- https://www.bip.pw.edu.pl/content/download/59138/554233/file/A.Kawala-Sterniuk%20recenzja.pdf
     - Monte carlo tree search
     - Q-Learning
     - Actor-Critic
