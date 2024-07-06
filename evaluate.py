@@ -20,6 +20,8 @@ def evaluate_player_pair(player0: Player, player1: Player, game_count: int) -> S
 		game = initialize_game_state()
 		play_game(game, player0, player1, skip_shop_decisions=True)
 
+		assert game.state != GameStep.STATE_ERROR
+
 		assert game_is_over(game)
 
 		scores.append(get_game_score(game))
