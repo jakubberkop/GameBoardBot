@@ -177,7 +177,7 @@ class PPOPlayer(Player):
 
 	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
 		obs = np.array(game_state.to_state_array(player_id))
-		action, _ = self.model.predict(obs)
+		action, _ = self.model.predict(obs, action_masks=get_legal_moves(game_state, player_id))
 		return PlayerDecision.from_state_array(action)
 
 	def name(self) -> str:
