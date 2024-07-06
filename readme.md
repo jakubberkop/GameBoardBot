@@ -1,96 +1,104 @@
-######################################################################
-# Training
-# --------
-#
-# Hyperparameters and utilities
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# This cell instantiates our model and its optimizer, and defines some
-# utilities:
-#
-# -  ``select_action`` - will select an action accordingly to an epsilon
-#    greedy policy. Simply put, we'll sometimes use our model for choosing
-#    the action, and sometimes we'll just sample one uniformly. The
-#    probability of choosing a random action will start at ``EPS_START``
-#    and will decay exponentially towards ``EPS_END``. ``EPS_DECAY``
-#    controls the rate of the decay.
-# -  ``plot_scores`` - a helper for plotting the score of episodes,
-#    along with an average over the last 100 episodes (the measure used in
-#    the official evaluations). The plot will be underneath the cell
-#    containing the main training loop, and will update after every
-#    episode.
-#
+# Quick start
 
-# BATCH_SIZE is the number of transitions sampled from the replay buffer
-# GAMMA is the discount factor as mentioned in the previous section
-# EPS_START is the starting value of epsilon
-# EPS_END is the final value of epsilon
-# EPS_DECAY controls the rate of exponential decay of epsilon, higher means a slower decay
-# TAU is the update rate of the target network
-# LR is the learning rate of the ``AdamW`` optimizer
+Install dependencies
+`pip install -r requirements.txt`
 
-# -------------
-#
-# We'll be using experience replay memory for training our DQN. It stores
-# the transitions that the agent observes, allowing us to reuse this data
-# later. By sampling from it randomly, the transitions that build up a
-# batch are decorrelated. It has been shown that this greatly stabilizes
-# and improves the DQN training procedure.
-#
-# For this, we're going to need two classes:
-#
-# -  ``Transition`` - a named tuple representing a single transition in
-#    our environment. It essentially maps (state, action) pairs
-#    to their (next_state, reward) result, with the state being the
-#    screen difference image as described later on.
-# -  ``ReplayMemory`` - a cyclic buffer of bounded size that holds the
-#    transitions observed recently. It also implements a ``.sample()``
-#    method for selecting a random batch of transitions for training.
-#
+Training project:
+`python3 sb3_maskable.py -n 10`
 
-######################################################################
-# Here is the diagram that illustrates the overall resulting data flow.
-#
-# .. figure:: /_static/img/reinforcement_learning_diagram.jpg
-#
-# Actions are chosen either randomly or based on a policy, getting the next
-# step sample from the gym environment. We record the results in the
-# replay memory and also run optimization step on every iteration.
-# Optimization picks a random batch from the replay memory to do training of the
-# new policy. The "older" target_net is also used in optimization to compute the
-# expected Q values. A soft update of its weights are performed at every step.
-#
+Run tensorboard:
+`tensorboard --logdir=runs/`
+
+Evaluate model results: `python3 evaluate.py`
+
+> Notes: evaluate.py hard codes the ppo model path, so it needs to be updated if the model is saved in a different location.
 
 
-######################################################################
-#
-# Below, you can find the main training loop. At the beginning we reset
-# the environment and obtain the initial ``state`` Tensor. Then, we sample
-# an action, execute it, observe the next state and the reward (always
-# 1), and optimize our model once. When the episode ends (our model
-# fails), we restart the loop.
-#
-# Below, `NUM_EPISODES` is set to 600 if a GPU is available, otherwise 50 
-# episodes are scheduled so training does not take too long. However, 50 
-# episodes is insufficient for to observe good performance on CartPole.
-# You should see the model constantly achieve 500 steps within 600 training 
-# episodes. Training RL agents can be a noisy process, so restarting training
-# can produce better results if convergence is not observed.
-#
+Example output
+```
+RandomPlayer         vs RandomPlayer        :  52%-42% [ 0]%  5228-4187:[585]                                      
+RandomPlayer         vs PPO Player          :   3%- 1% [ 1]%  254-147:[9599] 
+PPO Player           vs RandomPlayer        :   1%- 0% [ 1]%  94-38:[9868] 
+PPO Player           vs PPO Player          :   0%- 0% [ 1]%  6-5:[9989]
+```
 
-######################################################################
-# Training loop
-# ^^^^^^^^^^^^^
-#
-# Finally, the code for training our model.
-#
-# Here, you can find an ``optimize_model`` function that performs a
-# single step of the optimization. It first samples a batch, concatenates
-# all the tensors into a single one, computes :math:`Q(s_t, a_t)` and
-# :math:`V(s_{t+1}) = \max_a Q(s_{t+1}, a)`, and combines them into our
-# loss. By definition we set :math:`V(s) = 0` if :math:`s` is a terminal
-# state. We also use a target network to compute :math:`V(s_{t+1})` for
-# added stability. The target network is updated at every step with a 
-# `soft update <https://arxiv.org/pdf/1509.02971.pdf>`__ controlled by 
-# the hyperparameter ``TAU``, which was previously defined.
-#
+# Experiments
 
+## First steps
+The game has a discrete action space, where not all actions are valid in every state. This makes it difficult for some algorithms to learn the game. First approach was to have the model learn which actions are valid. I tried to achieve this by providing negative reward, whenever a model provided invalid action. Secondary the game would be restarted on invalid action - this was to make the model learn faster. I also provided a small reward for every valid action, to make the model learn faster.
+This approach was not successful, as the model would still provide invalid actions. I think this was because of a sparse reward signals.
+
+## Valid action mask
+Then I tried to mask the model prediction with a valid action mask, so that the most propable available action would be chosen. This is a bit tricky as there was no feedback to the model about the invalid actions. Maybe the model will train better if it knew whether the actions were valid or not. 
+Worth noting that this implementation was self made, as a 
+
+## Decision Transformer
+As oposed to other algorithms used in my experiments Decision Transformer is a supervised learning algorithm, that requires a dataset of games to be trained, which required me to prepare a dataset for it. This is a bit problematic, as the dataset itself needs explore the state space well enough to be useful, and the dataset generation process is quite slow. This is with contrast to reinforcement learning algorithms, that can explore the state space during training.
+I didn't manage to make the Decision Transformer work, may be wortwhile revisiting in the future.
+
+## Current focus
+Extending the state space with more data for the model.
+
+# Ideas
+- Test MaskedPPO with removed randomness
+    - Create player that always chooses highest card, and draws randomly if it has no cards
+    - Remove randomness from shop decisions - always choose the highest item
+- Add queue scores to the state
+- Consider different algorithms with mask
+    - DQN
+    - Decision Transformer
+    - Monte Carlo Tree Search - the phd thesis mentions
+- Consider that the game is a pvp. Explore the algorithms that are used in pvp games:
+    - Multi-Agents Reinforcement Learning (MARL)
+    - AlphaZero
+    - Q-Learning
+    - Actor-Critic
+- Provide a vector of possible actions in the state space
+
+# Project structure
+Ordered by importance:
+
+- game.py - implements the "pan to nie stał" board game. It simplfiies the game logic a bit, to make it easier to train the AI - for example, it automates few steps that are usually done manually.
+- game_env.py - implements the gym environment for the game. Assumes that the game is played agains one opponent, and the opponent is a random player (might be changed in the future).
+- evaluate.py - evaluates the model by playing it against other player implementations. Currently implements 
+- sb3_maskable.py - trains the model using Proximal Policy Optimization (PPO) algorithm, with mask applied to the action space to only allow valid moves. Currently my main focus.
+
+- decision_transformer.py, dataset.py - experiments with decision transformer. 
+- AA.py, game_torch.py - experiments using DQN (Deep Q-Network) algorithm. Wasn't able to make it work. I also used the implementation of 
+- game_first.py - first implementation of parts of the game. Might be useful?
+- all other files - random experiments, tests, etc.
+
+# Notes
+
+To read:
+- https://research.wdss.io/oh-hell/
+- https://bennycheung.github.io/game-architecture-card-ai-3
+- https://towardsdatascience.com/teaching-a-neural-network-to-play-cards-bb6a42c09e20
+- https://arxiv.org/abs/1910.04376
+- https://web.stanford.edu/class/aa228/reports/2019/final111.pdf
+- https://arxiv.org/abs/2311.17305
+- file:///home/jakub/Downloads/PhDThesis_Konrad_Godlewski_20221010.pdf
+    - Monte carlo tree search
+    - Q-Learning
+    - Actor-Critic
+
+- https://www.youtube.com/watch?v=rbZBBTLH32o
+
+Resources:
+- https://rlcard.org/
+
+Concecepts:
+- MDP - Markov decision process
+    - discrete-time stochastic control process
+    - goal => good "policy"
+- POMDP - Partially observable MDP
+- Curse of Dimensionality - phenomena that arise in high-dimensional spaces that do not occur in low-dimensional
+- Model-free Algorithm - does not estimate the transition probability distribution (and the reward function) associated with the MDP
+- SARSA - State–action–reward–state–action
+    - aka. MCQ-L Modified Connectionist Q-Learning
+- ε-greedy -  0 < ε < 1 is a parameter controlling the amount of exploration vs. exploitation
+state-value function Vπ(s) defined as, expected discounted return starting with state s, i.e. S0 =s , and successively following policy π
+- N-policy - With on-policy RL, actions are generated in response to observed environment states using a certain RL policy
+- Off-policy RL - maintains two distinct policies: A behavior policy and a target policy
+- random utility model (RUM) - where choices are dependent on random state variable
+- Multi-Agents Reinforcement Learning (MARL)

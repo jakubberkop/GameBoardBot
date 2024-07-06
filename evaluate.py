@@ -5,10 +5,13 @@ from game import *
 import tqdm
 import numpy as np
 
+# from transformer_player import TransformerPlayer
+from sb3_contrib import MaskablePPO
+
 Scores = List[int]
 
-import pytracy
-pytracy.set_tracing_mode(pytracy.TracingMode.MarkedFunctions)
+# import pytracy
+# pytracy.set_tracing_mode(pytracy.TracingMode.MarkedFunctions)
 
 def evaluate_player_pair(player0: Player, player1: Player, game_count: int) -> Scores:
 	scores: List[int] = []
@@ -26,7 +29,7 @@ def evaluate_player_pair(player0: Player, player1: Player, game_count: int) -> S
 
 	return scores
 
-def evaluate_players(players: Sequence[Player], game_count: int = 5000):
+def evaluate_players(players: Sequence[Player], game_count: int = 10_000):
 
 	scores: List[List[Scores]] = []
 
@@ -49,7 +52,7 @@ def evaluate_players(players: Sequence[Player], game_count: int = 5000):
 			ratio_1 = player_1_win_count / len(scores[i][j])
 			tie_ratio = tie_count / len(scores[i][j])
 
-			print(f"{a.name():20} vs {b.name():20}:  {ratio_0 * 100:2.0f}%-{ratio_1 * 100:2.0f}% [{tie_count:2.0f}]%  {player_0_win_count}-{player_1_win_count}:[{tie_count}] ")
+			print(f"{a.name():20} vs {b.name():20}:  {ratio_0 * 100:2.0f}%-{ratio_1 * 100:2.0f}% [{tie_ratio:2.0f}]%  {player_0_win_count}-{player_1_win_count}:[{tie_count}] ")
 
 
 class SimplePlayer(RandomPlayer):
@@ -164,20 +167,32 @@ class HumanPlayer(Player):
 		assert player_decision is not None
 		return player_decision
 
-
 	def name(self) -> str:
 		return "Human Player"
 
-from transformer_player import TransformerPlayer
+class PPOPlayer(Player):
 
-@pytracy.mark_function
+	def __init__(self) -> None:
+		self.model = MaskablePPO.load("ppo_mask_5000")
+
+	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
+		obs = np.array(game_state.to_state_array(player_id))
+		action, _ = self.model.predict(obs)
+		return PlayerDecision.from_state_array(action)
+
+	def name(self) -> str:
+		return "PPO Player"
+
+
+# @pytracy.mark_function
 def main():
 	players = [
 		# HumanPlayer(),
 		RandomPlayer(),
-		SimplePlayer(),
+		# SimplePlayer(),
 		# TransformerPlayer(),
 		# SimplePlayer(),
+		PPOPlayer(),
 	]
 	import time
 	a = time.time()
@@ -195,11 +210,12 @@ def human_game():
 
 def evaluate_t():
 	game = initialize_game_state()
-	tran = TransformerPlayer()
+	# tran = TransformerPlayer()
 	random = RandomPlayer()
 	play_game(game, tran, random, skip_shop_decisions=True, verbose=True)
 
+
 if __name__ == "__main__":
-	# main()
-	human_game()
-	evaluate_t()
+	main()
+	# human_game()
+	# evaluate_t()

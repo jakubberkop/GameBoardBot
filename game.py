@@ -282,9 +282,15 @@ class PlayerDecision:
 	def from_state_array(state: float | int) -> Optional["PlayerDecision"]:
 		# if type(state) == torch.Tensor or type(state) == list:
 			# action_type = torch.argmax(torch.tensor(state))
-		if type(state) == float or type(state) == int:
+		# is_numpy_numeral = type(state) == np.float32 or type(state) == np.int32 or type(state) == np.int64 or type(state) == np.float64
+		# if type(state) == float or type(state) == int or is_numpy_numeral:
+		# 	action_type = int(state)
+		# else:
+		# 	assert False, "Invalid state type"
+
+		try:
 			action_type = int(state)
-		else:
+		except:
 			assert False, "Invalid state type"
 
 
