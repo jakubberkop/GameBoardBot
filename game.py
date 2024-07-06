@@ -6,6 +6,7 @@ from typing import Any, Callable, DefaultDict, Dict, List, Optional, Set, Tuple
 # import torch
 import tqdm
 import numpy as np
+import numpy.typing as npt
 
 # from pytracy import *
 # set_tracing_mode(TracingMode.All)
@@ -264,7 +265,7 @@ class PlayerDecision:
 
 		return to_one_hot(encoded_type, 1 + len(CARD_INFO))
 
-	def to_state_array_fast(self) -> None:
+	def to_state_array_fast(self) -> npt.NDArray[np.float32]:
 		if self.type == PlayerDecision.Type.DRAW_CARD:
 			encoded_type = 0
 		elif self.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
@@ -863,7 +864,7 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 	else:
 		assert False, f"Invalid game state {game_state.state}"
 
-def get_legal_moves(game_state: GameState, player_id: int) -> np.ndarray:
+def get_legal_moves(game_state: GameState, player_id: int) -> npt.NDArray[np.float32]:
 	actions = np.zeros(1 + len(CARD_INFO), dtype=np.float32)
 
 	if game_state.state == GameStep.STATE_TURN_0 or game_state.state == GameStep.STATE_TURN_1:
@@ -884,7 +885,7 @@ class RandomPlayer(Player):
 	def name(self) -> str:
 		return "RandomPlayer"
 
-	def run_player_decision(self, game_state: GameState, player_id: int, legal_moves: Optional[np.ndarray] = None) -> PlayerDecision:
+	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
 		if game_state.state in [GameStep.STATE_SHOP_0_DECISION, GameStep.STATE_SHOP_1_DECISION]:
 			if game_state.state == GameStep.STATE_SHOP_0_DECISION:
 				shop_id = 0
@@ -915,6 +916,32 @@ class RandomPlayer(Player):
 			# queue_id = random.randint(0, 1) # TODO: Limit to 1 queue for now
 			queue_id = 0
 			return PlayerDecision(PlayerDecision.Type.PLACE_CARD_IN_QUEUE, card_type, count, queue_id=queue_id)
+
+class AlwaysFirstPlayer(Player):
+
+	def name(self) -> str:
+		return "AlwaysFirstPlayer"
+
+	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
+		legal_moves = get_legal_moves(game_state, player_id)
+		first_legal = np.argwhere(legal_moves != 0)[-1][0]
+		decision = PlayerDecision.from_state_array(first_legal)
+
+		assert decision is not None
+		return decision
+
+class AlwaysLastPlayer(Player):
+
+	def name(self) -> str:
+		return "AlwaysLastPlayer"
+
+	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
+		legal_moves = get_legal_moves(game_state, player_id)
+		last_legal = np.argwhere(legal_moves != 0)[-1][0]
+		decision = PlayerDecision.from_state_array(last_legal)
+
+		assert decision is not None
+		return decision
 
 import time
 def timeit(func: Callable):
