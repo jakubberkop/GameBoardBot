@@ -62,7 +62,7 @@ class SimplePlayer(RandomPlayer):
 	def name(self) -> str:
 		return "Simple Player"
 
-	def run_player_decision(self, game_state: GameState, player_id: int, legal_moves: Optional[np.ndarray] = None) -> PlayerDecision:
+	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
 		if game_state.state in [GameStep.STATE_SHOP_0_DECISION, GameStep.STATE_SHOP_1_DECISION]:
 			if game_state.state == GameStep.STATE_SHOP_0_DECISION:
 				shop_id = 0
@@ -149,7 +149,7 @@ class HumanPlayer(Player):
 			for i, move in enumerate(legal_moves):
 				if move:
 					# TODO: This crashes
-					print(f"{i}: {PlayerDecision.from_state_array(to_one_hot(i, ACTION_SIZE))}")
+					print(f"{i}: {PlayerDecision.from_state_array(i)}")
 
 			decision = input("Decision number:")
 
