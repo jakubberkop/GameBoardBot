@@ -865,18 +865,54 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 		assert False, f"Invalid game state {game_state.state}"
 
 def get_legal_moves(game_state: GameState, player_id: int) -> npt.NDArray[np.float32]:
-	actions = np.zeros(1 + len(CARD_INFO), dtype=np.float32)
+	actions = np.zeros(PlayerDecision.state_space_size(), dtype=np.float32)
 
 	if game_state.state == GameStep.STATE_TURN_0 or game_state.state == GameStep.STATE_TURN_1:
 		# Can we draw a card?
-		actions[0] = sum(game_state.player_states[player_id].deck.values()) > 0
+		index = 0
 
-		# Can we place a card in the queue?
-		for i, (card_type, _) in enumerate(CARD_INFO):
-			actions[i+1] = game_state.player_states[player_id].hand.get(card_type, 0) > 0
+		actions[index] = sum(game_state.player_states[player_id].deck.values()) > 0
+		index += 1
 
-	# TODO: Implement GameStep.STATE_TURN_2
-	# TODO: Implement shop decision
+		# Can we place a card in the queue #0
+		for (card_type, _) in CARD_INFO:
+			actions[index] = game_state.player_states[player_id].hand.get(card_type, 0) > 0
+			index += 1
+
+		# Can we place a card in the queue #1 
+		for (card_type, _) in CARD_INFO:
+			actions[index] = game_state.player_states[player_id].hand.get(card_type, 0) > 0
+			index += 1
+
+	elif game_state.state == GameStep.STATE_SHOP_0_DECISION or game_state.state == GameStep.STATE_SHOP_1_DECISION:
+		index = 1 + 2 * len(CARD_INFO)
+
+		shop = game_state.shops[0] if game_state.state == GameStep.STATE_SHOP_0_DECISION else game_state.shops[1]
+		# We don't have to check whether current player is winning in the shop, as the player can only make a decision if they are winning
+
+		# But the assert is regardless, to make sure the logic is correct
+		assert shop.get_player_score(player_id) > shop.get_player_score(1 - player_id)
+
+		if shop.get_item_count() == 2:
+			actions[index + 0] = 1
+			actions[index + 1] = 1
+	elif game_state.state == GameStep.STATE_TURN_2:
+		# Only MD card can be played in the third turn
+		has_one_md = game_state.player_states[player_id].hand.get(CardType("MD", 4), 0) > 0
+
+		if has_one_md:
+			index_of_md_in_card_info = CARD_INFO.index((CardType("MD", 4), 2))
+
+			# First queue
+			actions[1 + index_of_md_in_card_info] = 1
+
+			# Second queue
+			actions[1 + len(CARD_INFO) + index_of_md_in_card_info] = 1
+
+	elif game_state.state in END_GAME_STATES or game_state.state == GameStep.STATE_START:
+		pass # No legal moves when game is over or not started
+	else:
+		assert False, f"Legal moves not implemented for {game_state.state.name}"
 
 	return actions
 
