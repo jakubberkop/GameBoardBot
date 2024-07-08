@@ -1,8 +1,10 @@
+from typing import Any, Dict
 import gymnasium as gym
 import numpy as np
 import numpy.typing as npt
 
-from game import AI_PLAYER_ID, GameStep, PlayerDecision, game_is_over, get_game_score, get_legal_moves, initialize_game_state,  RandomPlayer, play_game_until_decision_one_player_that_is_not_a_shop_decision, print_game_state, set_decision
+from game import AI_PLAYER_ID, GameStep, AlwaysLastPlayer, PlayerDecision, game_is_over, get_game_score, get_legal_moves, initialize_game_state, play_game_until_decision_one_player_that_is_not_a_shop_decision, print_game_state, set_decision
+
 
 class GameEnv(gym.Env):
 
@@ -17,7 +19,7 @@ class GameEnv(gym.Env):
 		state_len = len(self.game_state.to_state_array(AI_PLAYER_ID))
 
 		self.observation_space = gym.spaces.Box(low=0, high=30, shape=(state_len,), dtype=np.float32)
-		self.action_space = gym.spaces.Discrete(len(PlayerDecision(0).to_state_array()))
+		self.action_space = gym.spaces.Discrete(PlayerDecision.state_space_size())
 
 		# assert render_mode is None or render_mode in self.metadata["render_modes"]
 		# self.render_mode = render_mode
@@ -32,8 +34,8 @@ class GameEnv(gym.Env):
 		self.window = None
 		self.clock = None
 
-	def get_obs(self):
-		return np.array(self.game_state.to_state_array(AI_PLAYER_ID), dtype=np.float32)
+	def get_obs(self) -> npt.NDArray[np.float32]:
+		return self.game_state.to_state_array(AI_PLAYER_ID)
 
 	def get_reward(self):
 		if self.game_state.state == GameStep.STATE_ERROR:
@@ -52,9 +54,9 @@ class GameEnv(gym.Env):
 		super().reset(seed=seed)
 
 		self.game_state = initialize_game_state()
-		random_player = RandomPlayer()
-
-		play_game_until_decision_one_player_that_is_not_a_shop_decision(self.game_state, random_player)
+		
+		self.oponent = AlwaysLastPlayer()
+		play_game_until_decision_one_player_that_is_not_a_shop_decision(self.game_state, self.oponent)
 
 		observation = self.get_obs()
 
@@ -66,20 +68,17 @@ class GameEnv(gym.Env):
 	def _render_frame(self):
 		print_game_state(self.game_state)
 
-	def step(self, action: np.ndarray):
-		play_game_until_decision_one_player_that_is_not_a_shop_decision(self.game_state, RandomPlayer())
+	def step(self, action: int):
+		decision = PlayerDecision.from_encoded_action(action)
 
-		decision = PlayerDecision.from_state_array(action)
+		assert decision, "Invalid action"
 
-		if decision:
-			set_decision(self.game_state, decision, AI_PLAYER_ID)
-		else:
-			assert False, "Invalid action"
+		set_decision(self.game_state, decision, AI_PLAYER_ID)
 
 		if self.render_mode == "human":
 			print("Decision: ", decision)
 
-		play_game_until_decision_one_player_that_is_not_a_shop_decision(self.game_state, RandomPlayer())
+		play_game_until_decision_one_player_that_is_not_a_shop_decision(self.game_state, self.oponent)
 
 		terminated = self.game_state.end_game or self.game_state.state == GameStep.STATE_ERROR or self.game_state.state == GameStep.STATE_END or game_is_over(self.game_state) #TODO: This is messy
 
@@ -89,12 +88,14 @@ class GameEnv(gym.Env):
 
 		if self.render_mode == "human":
 			self._render_frame()
+		
+		info: Dict[str, Any] = {"legal_moves": get_legal_moves(self.game_state, AI_PLAYER_ID)}
+		if terminated:
+			info["is_success"] = reward > 0
 
-		return observation, reward, terminated, False, {"legal_moves": get_legal_moves(self.game_state, AI_PLAYER_ID)}
+		return observation, reward, terminated, False, info
 
-	
-
-	def action_masks(self) -> npt.NDArray[np.float64]:
+	def action_masks(self) -> npt.NDArray[np.float32]:
 		"""
 		Returns a boolean array of size 9, where each element is True if the action is valid, False otherwise.
 		"""

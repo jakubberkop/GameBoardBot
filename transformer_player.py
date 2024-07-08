@@ -25,7 +25,7 @@ class TransformerPlayer(Player):
 		state_count = len(self.states)
 
 		states  = torch.from_numpy(np.array(self.states)) .reshape(BATCH_SIZE, state_count, STATE_SIZE)
-		actions = torch.from_numpy(np.array(self.actions)).reshape(BATCH_SIZE, state_count, ACTION_SIZE)
+		actions = torch.from_numpy(np.array(self.actions)).reshape(BATCH_SIZE, state_count, PlayerDecision.state_space_size())
 		rewards = torch.tensor(self.rewards).reshape(BATCH_SIZE, state_count)
 		target_return = torch.tensor(TARGET_RETURN).reshape(BATCH_SIZE, 1)
 		timesteps = torch.tensor([i for i in range(state_count)]).reshape(BATCH_SIZE, state_count)

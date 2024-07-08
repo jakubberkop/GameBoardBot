@@ -1,12 +1,12 @@
-from typing import Sequence
+import os
 
-from game import *
+from typing import Sequence
 
 import tqdm
 import numpy as np
-
-# from transformer_player import TransformerPlayer
 from sb3_contrib import MaskablePPO
+
+from game import *
 
 Scores = List[int]
 
@@ -31,7 +31,7 @@ def evaluate_player_pair(player0: Player, player1: Player, game_count: int) -> S
 
 	return scores
 
-def evaluate_players(players: Sequence[Player], game_count: int = 10_000):
+def evaluate_players(players: Sequence[Player], game_count: int = 100):
 
 	scores: List[List[Scores]] = []
 
@@ -149,7 +149,7 @@ class HumanPlayer(Player):
 			for i, move in enumerate(legal_moves):
 				if move:
 					# TODO: This crashes
-					print(f"{i}: {PlayerDecision.from_state_array(i)}")
+					print(f"{i}: {PlayerDecision.from_encoded_action(i)}")
 
 			decision = input("Decision number:")
 
@@ -165,7 +165,7 @@ class HumanPlayer(Player):
 
 			print("Invalid decision")
 
-		player_decision = PlayerDecision.from_state_array(to_one_hot(int(decision), ACTION_SIZE))
+		player_decision = PlayerDecision.from_encoded_action(decision)
 		assert player_decision is not None
 		return player_decision
 
@@ -174,27 +174,44 @@ class HumanPlayer(Player):
 
 class PPOPlayer(Player):
 
-	def __init__(self) -> None:
-		self.model = MaskablePPO.load("ppo_mask_5000")
+	def get_newest_model(self):
+		
+		models = [f for f in os.listdir() if f.startswith("ppo_mask")]
+		models.sort(key=lambda x: os.path.getmtime(x))
+		return models[-1]
+
+	def __init__(self, model_name: str | None = None) -> None:
+		self.model_name = model_name
+
+		if model_name is None:
+			self.model_name = self.get_newest_model()
+
+		assert self.model_name is not None
+
+		self.model = MaskablePPO.load(self.model_name)
 
 	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
 		obs = np.array(game_state.to_state_array(player_id))
 		action, _ = self.model.predict(obs, action_masks=get_legal_moves(game_state, player_id))
-		return PlayerDecision.from_state_array(action)
+		return PlayerDecision.from_encoded_action(action)
 
 	def name(self) -> str:
-		return "PPO Player"
+		return f"PPO: {self.model_name}"
 
 
 # @pytracy.mark_function
 def main():
 	players = [
 		# HumanPlayer(),
-		RandomPlayer(),
+		# RandomPlayer(),
+		# AlwaysFirstPlayer(),
+		AlwaysLastPlayer(),
 		# SimplePlayer(),
 		# TransformerPlayer(),
 		# SimplePlayer(),
-		PPOPlayer(),
+		# PPOPlayer("ppo_mask_fixed_reward_500000"),
+		# PPOPlayer("ppo_mask_5000"),
+		PPOPlayer() # Newest model
 	]
 	import time
 	a = time.time()

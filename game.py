@@ -1,9 +1,8 @@
 from dataclasses import dataclass, field
 from enum import IntEnum
 import random
-from typing import Any, Callable, DefaultDict, Dict, List, Optional, Set, Tuple
+from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple
 
-# import torch
 import tqdm
 import numpy as np
 import numpy.typing as npt
@@ -94,7 +93,7 @@ class PlayerState:
 
 	STATE_SIZE = 2 + len(CARD_INFO)
 
-	def to_state_array_fast(self, array, index, private: bool) -> None:
+	def to_state_array_fast(self, array: npt.NDArray[np.float32], index: int, private: bool) -> None:
 		array[index] = self.points
 		array[index+1] = sum(self.deck.values())
 
@@ -125,7 +124,7 @@ class ShopState:
 	STATE_SIZE: int = 0
 
 	def __post_init__(self):
-		self.STATE_SIZE = len(self.to_state_array(0))
+		ShopState.STATE_SIZE = len(self.to_state_array(0))
 
 	def get_player_score(self, player_id: int) -> int:
 		# TODO: Implement other scoring rules
@@ -143,42 +142,7 @@ class ShopState:
 		self.limbo_item = LimboItem(self.items[item_id], player_id)
 		self.items.pop(item_id)
 
-	def to_state_array(self, player_id: int) -> List[int]:
-		state: List[int] = []
-
-		item_count = len(self.items)
-
-		if item_count == 2:
-			state.append(self.items[0].value)
-			state.append(self.items[1].value)
-			state.append(self.limbo_item.item.value if self.limbo_item else 0)
-		elif item_count == 1:
-			state.append(self.items[0].value)
-			state.append(0)
-			state.append(self.limbo_item.item.value if self.limbo_item else 0)
-		else:
-			state.append(0)
-			state.append(0)
-			state.append(self.limbo_item.item.value if self.limbo_item else 0)
-
-		# player_id
-		for card_type, _ in CARD_INFO:
-			card_count = sum(queue_item.count for queue_item in self.queue if queue_item.card_type == card_type and queue_item.player_id == player_id)
-			state.append(card_count)
-
-		# opponent_id
-		for card_type, _ in CARD_INFO:
-			card_count = sum(queue_item.count for queue_item in self.queue if queue_item.card_type == card_type and queue_item.player_id != player_id)
-			state.append(card_count)
-
-		return state
-	
-	def to_state_array_fast(self, state, index, player_id: int) -> None:
-		# slow_state = self.to_state_array(player_id)
-		# start_index = index
-		# for i in range(len(slow_state)):
-		# 	state[index + i] = slow_state[i]
-
+	def to_state_array_fast(self, state: npt.NDArray[np.float32], index: int, player_id: int) -> None:
 		item_count = len(self.items)
 
 		if item_count == 2:
@@ -208,9 +172,7 @@ class ShopState:
 			state[index] = card_count
 			index += 1
 
-		# # comppare to slow state
-		# for i in range(len(slow_state)):
-		# 	assert state[start_index + i] == slow_state[i]
+		assert index == len(state), f"State should be fully filled {index} != {len(state)}"
 
 	def __str__(self):
 		item_str = " ".join([item.name for item in self.items])
@@ -237,7 +199,7 @@ class PlayerDecision:
 	item_id: Optional[int] = None
 
 	def __init__(self, type: int, card_type: Optional[CardType] = None, count: Optional[int] = None, queue_id: Optional[int] = None, item_id: Optional[int] = None):
-		self.type = type
+		self.type = PlayerDecision.Type(type)
 		self.card_type = card_type
 		self.count = count
 		self.item_id = item_id
@@ -253,72 +215,72 @@ class PlayerDecision:
 		else:
 			return False
 
-	def to_state_array(self) -> List[int]:
+	# Encoded Player Decision:
+	# 
+	# Length          Type
+	# 1:              Draw card
+	# len(CARD_INFO): Place card in queue 0
+	# len(CARD_INFO): Place card in queue 1
+	# 2:              Shop decision (First or second item)
+	def _encode_action(self) -> int:
+		action_offset = {
+			PlayerDecision.Type.DRAW_CARD: 0,
+			PlayerDecision.Type.PLACE_CARD_IN_QUEUE: 1,
+			PlayerDecision.Type.SHOP_DECISION: 1 + len(CARD_INFO) * 2 + 1,
+		}
+		
 		if self.type == PlayerDecision.Type.DRAW_CARD:
-			encoded_type = 0
+			return action_offset[self.type]
 		elif self.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
-			encoded_type = 1 + self.card_type.id
-		# elif self.type == PlayerDecision.Type.SHOP_DECISION:
-		# 	encoded_type = 1 + len(CARD_INFO)
+			assert self.card_type
+			assert self.count
+			return action_offset[self.type] + self.card_type.id
+		elif self.type == PlayerDecision.Type.SHOP_DECISION:
+			assert self.item_id
+			return action_offset[self.type] + self.item_id
 		else:
 			assert False
 
-		return to_one_hot(encoded_type, 1 + len(CARD_INFO))
-
-	def to_state_array_fast(self) -> npt.NDArray[np.float32]:
-		if self.type == PlayerDecision.Type.DRAW_CARD:
-			encoded_type = 0
-		elif self.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
-			encoded_type = 1 + self.card_type.id
-		# elif self.type == PlayerDecision.Type.SHOP_DECISION:
-		# 	encoded_type = 1 + len(CARD_INFO)
-		else:
-			assert False
-
-		result = np.zeros(1 + len(CARD_INFO), dtype=np.float32)
-		result[encoded_type] = 1
-		return result
+	def encode_action(self) -> int:
+		action = self._encode_action()
+		assert action >= 0 and action < self.state_space_size()
+		return action
 
 	@staticmethod
-	def from_state_array(state: float | int) -> Optional["PlayerDecision"]:
-		# if type(state) == torch.Tensor or type(state) == list:
-			# action_type = torch.argmax(torch.tensor(state))
-		# is_numpy_numeral = type(state) == np.float32 or type(state) == np.int32 or type(state) == np.int64 or type(state) == np.float64
-		# if type(state) == float or type(state) == int or is_numpy_numeral:
-		# 	action_type = int(state)
-		# else:
-		# 	assert False, "Invalid state type"
+	def state_space_size() -> int:
+		return 1 + len(CARD_INFO) * 2 + 2
 
-		try:
-			action_type = int(state)
-		except:
-			assert False, "Invalid state type"
+	@staticmethod
+	def from_encoded_action(encoded_action: int) -> "PlayerDecision":
+		assert encoded_action >= 0 and encoded_action < PlayerDecision.state_space_size()
 
-
-		if action_type == PlayerDecision.Type.DRAW_CARD:
+		if encoded_action == 0:
 			return PlayerDecision(PlayerDecision.Type.DRAW_CARD)
-		elif 0 < action_type and action_type <= len(CARD_INFO):
-			card_type_id = action_type - 1
+
+		encoded_action -= 1
+
+
+		if 0 <= encoded_action and encoded_action < len(CARD_INFO):
+			card_type_id = encoded_action
 			card_type = CardType.from_id(card_type_id)
 
-			# card_count = int(state[len(CARD_INFO)+1])
-			# TODO: Card count is always 1 for now
+			return PlayerDecision(PlayerDecision.Type.PLACE_CARD_IN_QUEUE, card_type, 1, queue_id=0)
 
-			card_count = 1
+		encoded_action -= len(CARD_INFO)
 
-			# TODO: Queue id is always 0 for now
-			queue_id = 0
+		if 0 <= encoded_action and encoded_action < len(CARD_INFO):
+			card_type_id = encoded_action
+			card_type = CardType.from_id(card_type_id)
+
+			return PlayerDecision(PlayerDecision.Type.PLACE_CARD_IN_QUEUE, card_type, 1, queue_id=1)
 
 
-			return PlayerDecision(PlayerDecision.Type.PLACE_CARD_IN_QUEUE, card_type, card_count, queue_id=queue_id)
+		encoded_action -= len(CARD_INFO)
+		
+		if 0 <= encoded_action and encoded_action < 2:
+			return PlayerDecision(PlayerDecision.Type.SHOP_DECISION, item_id=encoded_action)
 
-		# TODO: Shop decision is commented for now
-		# elif action_type == PlayerDecision.Type.SHOP_DECISION:
-		# 	item_id = int(state[-1])
-		# 	return PlayerDecision(PlayerDecision.Type.SHOP_DECISION, item_id=item_id)
-
-		else:
-			assert False, "Invalid action type"
+		assert False, "Invalid encoded action"
 
 	def __eq__(self, other: Any):
 		if self.type != other.type:
@@ -331,8 +293,8 @@ class PlayerDecision:
 			return self.card_type == other.card_type and self.count == other.count
 		
 		# TODO: Shop decision is commented for now
-		# if self.type == PlayerDecision.Type.SHOP_DECISION:
-		# 	return self.item_id == other.item_id
+		if self.type == PlayerDecision.Type.SHOP_DECISION:
+			return self.item_id == other.item_id and self.queue_id == other.queue_id
 		
 		assert False
 
@@ -386,18 +348,32 @@ class GameState:
 	turn: int = 0
 	turn_counter: int = 0
 
-	def to_state_array(self, player_id: int) -> List[int]:
-		state = np.zeros(1 + 2 * PlayerState.STATE_SIZE + 2 * self.shops[0].STATE_SIZE, dtype=np.float32)
-		state[0] = self.state
+	def to_state_array(self, player_id: int) -> npt.NDArray[np.float32]:
+		state_size = len(GameStep) + 2 * PlayerState.STATE_SIZE + 2 * ShopState.STATE_SIZE + PlayerDecision.state_space_size()
 
-		index = 0
+		state = np.zeros(state_size, dtype=np.float32)
+		
+		# One hot encoding of the state
+		state[int(self.state)] = 1
+		index = len(GameStep)
+
+		# Player states
 		for player_state in self.player_states:
 			player_state.to_state_array_fast(state, index, player_id == 0)
 			index += PlayerState.STATE_SIZE
 	
+
+		# Shop states
 		for shop in self.shops:
 			shop.to_state_array_fast(state, index, player_id)
 			index += ShopState.STATE_SIZE
+
+		# Possible actions
+		for e in get_legal_moves(self, player_id):
+			state[index] = e
+			index += 1
+
+		assert index == len(state), f"State should be fully filled {index} != {len(state)}"
 
 		return state
 	
@@ -737,19 +713,11 @@ def play_game_until_decision_one_player_that_is_not_a_shop_decision(game_state: 
 			set_decision(game_state, npc.run_player_decision(game_state, AI_PLAYER_ID), AI_PLAYER_ID)
 			continue
 
-		if game_state.state == GameStep.STATE_TURN_0 or game_state.state == GameStep.STATE_TURN_1: # TODO: Implement or game_state.state == GameStep.STATE_TURN_2:
-			# And we cannot do anything other than draw a card
-			# This is so that we make model training easier
-			if sum(game_state.player_states[AI_PLAYER_ID].hand.values()) == 0:
-				set_decision(game_state, PlayerDecision(PlayerDecision.Type.DRAW_CARD), AI_PLAYER_ID)
-				continue
-			return
-
 		return
 
 def play_game(game_state: GameState, player0: Player, player_1: Player, verbose: bool = False, skip_shop_decisions: bool = False) -> None:
 	def run_shop_decision(game_state: GameState) -> None:
-		decision = RandomPlayer().run_player_decision(game_state, game_state.turn)
+		decision = AlwaysFirstPlayer().run_player_decision(game_state, game_state.turn)
 		set_decision(game_state, decision, game_state.turn)
 
 	while not game_is_over(game_state):
@@ -961,7 +929,7 @@ class AlwaysFirstPlayer(Player):
 	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
 		legal_moves = get_legal_moves(game_state, player_id)
 		first_legal = np.argwhere(legal_moves != 0)[-1][0]
-		decision = PlayerDecision.from_state_array(first_legal)
+		decision = PlayerDecision.from_encoded_action(first_legal)
 
 		assert decision is not None
 		return decision
@@ -974,25 +942,13 @@ class AlwaysLastPlayer(Player):
 	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
 		legal_moves = get_legal_moves(game_state, player_id)
 		last_legal = np.argwhere(legal_moves != 0)[-1][0]
-		decision = PlayerDecision.from_state_array(last_legal)
+		decision = PlayerDecision.from_encoded_action(last_legal)
 
 		assert decision is not None
 		return decision
 
-import time
-def timeit(func: Callable):
-	def timed(*args, **kwargs):
-		print(f"Timing function {func.__name__}")
-		ts = time.time()
-		for i in range(1):
-			result = func(*args, **kwargs)
-		te = time.time()
-		print(f"Function {func.__name__} took {(te-ts)/1000} seconds")
-		return result
-	return timed
 
 if __name__ == "__main__":
-
 	score = 0
 
 	for i in tqdm.tqdm(range(1000)):
@@ -1007,4 +963,3 @@ if __name__ == "__main__":
 
 
 STATE_SIZE = len(initialize_game_state().to_state_array(0))
-ACTION_SIZE = len(PlayerDecision(0).to_state_array())
