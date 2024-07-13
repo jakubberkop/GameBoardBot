@@ -11,7 +11,9 @@ from game import *
 Scores = List[int]
 
 # import pytracy
-# pytracy.set_tracing_mode(pytracy.TracingMode.MarkedFunctions)
+# pytracy.set_tracing_mode(pytracy.TracingMode.All)
+# pytracy.add_path_to_filter("/")
+
 
 def evaluate_player_pair(player0: Player, player1: Player, game_count: int) -> Scores:
 	scores: List[int] = []
@@ -196,7 +198,7 @@ class PPOPlayer(Player):
 		return PlayerDecision.from_encoded_action(action)
 
 	def name(self) -> str:
-		return f"PPO: {self.model_name}"
+		return f"PPO: {self.model_name[-10:]}"
 
 
 # @pytracy.mark_function
@@ -204,7 +206,7 @@ def main():
 	players = [
 		# HumanPlayer(),
 		# RandomPlayer(),
-		# AlwaysFirstPlayer(),
+		AlwaysFirstPlayer(),
 		AlwaysLastPlayer(),
 		# SimplePlayer(),
 		# TransformerPlayer(),

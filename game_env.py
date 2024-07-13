@@ -13,12 +13,13 @@ class GameEnv(gym.Env):
         "render_fps": 50,
     }
 
-	def __init__(self):
+	def __init__(self, player_type: type = AlwaysLastPlayer):
 		self.game_state = initialize_game_state()
+		self.player_type = player_type
 
 		state_len = len(self.game_state.to_state_array(AI_PLAYER_ID))
 
-		self.observation_space = gym.spaces.Box(low=0, high=30, shape=(state_len,), dtype=np.float32)
+		self.observation_space = gym.spaces.Box(low=0, high=1, shape=(state_len,), dtype=np.float32)
 		self.action_space = gym.spaces.Discrete(PlayerDecision.state_space_size())
 
 		# assert render_mode is None or render_mode in self.metadata["render_modes"]
@@ -55,7 +56,7 @@ class GameEnv(gym.Env):
 
 		self.game_state = initialize_game_state()
 		
-		self.oponent = AlwaysLastPlayer()
+		self.oponent = self.player_type()
 		play_game_until_decision_one_player_that_is_not_a_shop_decision(self.game_state, self.oponent)
 
 		observation = self.get_obs()

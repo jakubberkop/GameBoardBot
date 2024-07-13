@@ -121,10 +121,7 @@ class ShopState:
 	queue: List[QueueItem] = field(default_factory=list)
 
 	limbo_item: Optional[LimboItem] = None
-	STATE_SIZE: int = 0
-
-	def __post_init__(self):
-		ShopState.STATE_SIZE = len(self.to_state_array(0))
+	STATE_SIZE: int = 3 + 2 * len(CARD_INFO)
 
 	def get_player_score(self, player_id: int) -> int:
 		# TODO: Implement other scoring rules
@@ -171,8 +168,6 @@ class ShopState:
 			card_count = sum(queue_item.count for queue_item in self.queue if queue_item.card_type == card_type and queue_item.player_id != player_id)
 			state[index] = card_count
 			index += 1
-
-		assert index == len(state), f"State should be fully filled {index} != {len(state)}"
 
 	def __str__(self):
 		item_str = " ".join([item.name for item in self.items])
@@ -726,18 +721,24 @@ def play_game(game_state: GameState, player0: Player, player_1: Player, verbose:
 		if verbose:
 			print_game_state(game_state)
 
-		if skip_shop_decisions and game_state.state in [GameStep.STATE_SHOP_0_DECISION, GameStep.STATE_SHOP_1_DECISION]:
-			run_shop_decision(game_state)
-		else:
-			if game_state.turn == AI_PLAYER_ID:
-				decision = player0.run_player_decision(game_state, AI_PLAYER_ID)
-				set_decision(game_state, decision, AI_PLAYER_ID)
-			elif game_state.turn == NPC_PLAYER_ID:
-				decision = player_1.run_player_decision(game_state, NPC_PLAYER_ID)
-				set_decision(game_state, decision, NPC_PLAYER_ID)
-			else:
-				assert False, "Player turn is invalid"
+		if game_is_over(game_state):
+			return
 
+		if game_state.state in [GameStep.STATE_SHOP_0_DECISION, GameStep.STATE_SHOP_1_DECISION]:
+			if skip_shop_decisions:
+				run_shop_decision(game_state)
+				continue
+
+		if game_state.turn == AI_PLAYER_ID:
+			decision = player0.run_player_decision(game_state, AI_PLAYER_ID)
+			set_decision(game_state, decision, AI_PLAYER_ID)
+		elif game_state.turn == NPC_PLAYER_ID:
+			decision = player_1.run_player_decision(game_state, NPC_PLAYER_ID)
+			set_decision(game_state, decision, NPC_PLAYER_ID)
+		else:
+			assert False, "Player turn is invalid"
+
+		# TODO: Fix printing
 		if verbose:
 			print()
 			print(f"Decision: {decision} - Player {game_state.turn}")
