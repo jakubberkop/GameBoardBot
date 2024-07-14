@@ -44,13 +44,3 @@ if __name__ == "__main__":
     import datetime
     model.save(f"ppo_mask_extended_{args.i}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
     # del model # remove to demonstrate saving and loading
-
-    # # print("Model loaded")
-    # # obs, _ = env.reset()
-    # # while True:
-    #     # Retrieve current action mask
-    #     action_masks = get_action_masks(env)
-    #     action, _states = model.predict(obs, action_masks=action_masks)
-    #     obs, reward, terminated, truncated, info = env.step(action)
-
-    # evaluate_policy(model, env, n_eval_episodes=20, warn=True)

@@ -293,12 +293,15 @@ def human_game():
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 
-	parser.add_argument("mode", choices=["evaluate", "human"], default="evaluate", help="Mode to run the program in")
+	parser.add_argument("--train", type=bool, default=False, help="Train a model")
 	parser.add_argument("-n", type=int, default=100, help="Number of games to play")
+
+	# Adda flag that enables human vs computer
+	parser.add_argument("--human", action="store_true", help="Play a game against the computer")
 
 	args = parser.parse_args()
 
-	if args.mode == "evaluate":
-		main(args.n)
-	elif args.mode == "human":
+	if args.human:
 		human_game()
+	else:
+		main(args.n)

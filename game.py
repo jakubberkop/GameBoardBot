@@ -148,9 +148,7 @@ class ShopState:
 			state[index + 1] = 0
 			state[index + 2] = self.limbo_item.item.value if self.limbo_item else 0
 		else:
-			state[index + 0] = 0
-			state[index + 1] = 0
-			state[index + 2] = self.limbo_item.item.value if self.limbo_item else 0
+			assert False, "Invalid shop state"
 
 		index += 3
 
@@ -171,9 +169,6 @@ class ShopState:
 		queue_str = " ".join([f"{queue_item.card_type.name}x{queue_item.count}" for queue_item in self.queue])
 		return f"Items: {item_str} Queue: {queue_str} Limbo: {self.limbo_item}"
 
-def to_one_hot(value: int, count: int) -> List[int]:
-	return [1 if value == i else 0 for i in range(count)]
-
 class PlayerDecision:
 	class Type(IntEnum):
 		DRAW_CARD = 0
@@ -190,22 +185,14 @@ class PlayerDecision:
 	# SHOP_DECISION
 	item_id: Optional[int] = None
 
+	# TODO: Implement descision for "PTN"
+	# TODO: Implement MD in 2 turn
 	def __init__(self, type: int, card_type: Optional[CardType] = None, count: Optional[int] = None, queue_id: Optional[int] = None, item_id: Optional[int] = None):
 		self.type = PlayerDecision.Type(type)
 		self.card_type = card_type
 		self.count = count
 		self.item_id = item_id
 		self.queue_id = queue_id
-
-	def isValid(self):
-		if self.type == PlayerDecision.Type.DRAW_CARD:
-			return True
-		elif self.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
-			return self.card_type is not None and self.count is not None
-		# elif self.type == PlayerDecision.Type.SHOP_DECISION:
-		# 	return self.item_id is not None
-		else:
-			return False
 
 	CARD_OFFSET = 21
 
@@ -408,12 +395,6 @@ class GameState:
 		assert index == len(state), f"State should be fully filled {index} != {len(state)}"
 
 		return state
-	
-	def get_reward(self, player_id: int) -> int:
-		if player_id == AI_PLAYER_ID:
-			return get_game_score(self)
-		else:
-			return -get_game_score(self)
 
 	def __str__(self):
 		return f""" {self.state}
@@ -430,7 +411,7 @@ class Player:
 	T = Type["Player"]
 
 	def name(self) -> str:
-		return False, "Not implemented" # type: ignore
+		assert False, "Not implemented"
 
 	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
 		assert False, "Not implemented"
@@ -556,26 +537,8 @@ def run_shop_until(game_state: GameState, shop_id: int, player_id: int) -> None:
 def player_can_play(player_state: PlayerState) -> bool:
 	return sum(player_state.deck.values()) > 0 or sum(player_state.hand.values()) > 0
 
-def decision_can_be_played(decision: PlayerDecision, player_state: PlayerState) -> bool:
-	if decision.type == PlayerDecision.Type.DRAW_CARD:
-		return sum(player_state.deck.values()) > 0
-	elif decision.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
-		return sum(player_state.hand.values()) > 0
-	else:
-		return False
-
 def game_is_over(game_state: GameState) -> bool:
 	return any(not player_can_play(player_state) for player_state in game_state.player_states) or game_state.end_game or game_state.state in END_GAME_STATES
-
-def validate_game_state(game_state: GameState) -> bool:
-	player_points = sum([player_state.points for player_state in game_state.player_states])
-	total_item_points = sum([item.value * count for item, count in get_default_item_deck().items()])
-
-	if player_points > total_item_points:
-		print(f"Player points {player_points} cannot exceed total item points {total_item_points}")
-		return False
-	
-	return True
 
 def get_game_score(game_state: GameState) -> int:
 	assert len(game_state.player_states) == 2

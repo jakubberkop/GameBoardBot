@@ -1,0 +1,1 @@
+coverage run coverage.py; coverage html; xdg-open htmlcov/index.html
