@@ -1,17 +1,16 @@
 from sb3_contrib import MaskablePPO
 from stable_baselines3.common.monitor import Monitor
 # from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.callbacks import CheckpointCallback
 # from torch.utils.tensorboard import SummaryWriter
 
-from game import RandomPlayer
+from game import RandomPlayer, AlwaysFirstPlayer, AlwaysLastPlayer
 from game_env import GameEnv
 import stable_baselines3.common.vec_env as sb3_vec_env
 
 # import pytracy
 # pytracy.set_tracing_mode(pytracy.TracingMode.All)
 # pytracy.add_path_to_filter("/")
-
-callback = None
 
 if __name__ == "__main__":
 
@@ -35,10 +34,11 @@ if __name__ == "__main__":
         # env = sb3_vec_env.SubprocVecEnv([lambda: GameEnv() for _ in range(args.n)])
 
     # model = MaskablePPO.load("ppo_mask_extended_1000000_2024-07-08_20-57-50", env, verbose=1, tensorboard_log="runs")
+    checkpoint_callback = CheckpointCallback(save_freq=100, save_path='./model_checkpoints/')
 
-    model = MaskablePPO("MlpPolicy", env, gamma=0.8, verbose=1, tensorboard_log="runs")
+    model = MaskablePPO("MlpPolicy", env, n_steps=64, gamma=0.8, verbose=1, tensorboard_log="runs")
 
-    model.learn(args.i, callback=callback, log_interval=1, progress_bar=True)
+    model.learn(args.i, callback=checkpoint_callback, log_interval=1, progress_bar=True)
 
     print("Training finished")
     import datetime
