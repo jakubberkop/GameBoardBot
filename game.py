@@ -359,9 +359,18 @@ class GameState:
 	shops: List[ShopState] = field(default_factory=list)
 	items_deck: Dict[Item, int] = field(default_factory=dict)
 	end_game: bool = False
-	state: int = GameStep.STATE_START
+	_state: int = GameStep.STATE_START
 	turn: int = 0
 	turn_counter: int = 0
+
+	@property
+	def state(self) -> GameStep:
+		return self._state
+	
+	@state.setter
+	def state(self, value: GameStep) -> None:
+		assert GameStep(value) != GameStep.STATE_ERROR
+		self._state = value
 
 	def to_state_array(self, player_id: int) -> npt.NDArray[np.float32]:
 		state_size = len(GameStep) + 2 * PlayerState.STATE_SIZE + 2 * ShopState.STATE_SIZE + PlayerDecision.state_space_size()
@@ -589,43 +598,6 @@ def print_game_state(game_state: GameState) -> None:
 
 	print(f"Shop 0: {' '.join([item.name for item in game_state.shops[0].items]):8} Q: {queue_state(game_state.shops[0])}")
 	print(f"Shop 1: {' '.join([item.name for item in game_state.shops[1].items]):8} Q: {queue_state(game_state.shops[1])}")
-
-def run_player_turn_until(game_state: GameState, player_id: int):
-	player_state = game_state.player_states[player_id]
-
-	# def execute_decision(player_decision: PlayerDecision):
-	# 	if player_decision.type == PlayerDecision.Type.DRAW_CARD:
-	# 		draw_card = draw_from_deck(player_state.deck)
-	# 		player_state.hand[draw_card] += 1
-	# 	elif player_decision.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
-	# 		assert player_decision.count
-	# 		assert player_decision.card_type
-
-	# 		player_state.hand[player_decision.card_type] -= player_decision.count
-	# 		if player_state.hand[player_decision.card_type] == 0:
-	# 			del player_state.hand[player_decision.card_type]
-	# 		game_state.shops[player_id].queue.append(QueueItem(player_decision.card_type, player_decision.count, player_id))
-
-	# 	else:
-	# 		assert False, "Invalid player decision type"
-
-	if not player_can_play(player_state):
-		game_state.end_game = True
-		return
-
-	player_decision = player.run_player_decision(game_state, player_id)
-	assert player_decision.isValid()
-	assert decision_can_be_played(player_decision, player_state)
-	execute_decision(player_decision)
-
-	if not player_can_play(player_state):
-		game_state.end_game = True
-		return
-
-	player_decision = player.run_player_decision(game_state, player_id)
-	assert player_decision.isValid()
-	assert decision_can_be_played(player_decision, player_state)
-	execute_decision(player_decision)
 
 def play_game_until_decision(game_state: GameState) -> None:
 	def game_step(game_state: GameState, player_id: int) -> None:

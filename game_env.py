@@ -39,8 +39,7 @@ class GameEnv(gym.Env):
 		return self.game_state.to_state_array(AI_PLAYER_ID)
 
 	def get_reward(self):
-		if self.game_state.state == GameStep.STATE_ERROR:
-			assert False, "Invalid action"
+		assert self.game_state.state != GameStep.STATE_ERROR, "Invalid action"
 
 		if game_is_over(self.game_state):
 			if get_game_score(self.game_state) > 0:
