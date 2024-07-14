@@ -110,7 +110,7 @@ class ShopState:
 	queue: List[QueueItem] = field(default_factory=list)
 
 	limbo_item: Optional[LimboItem] = None
-	STATE_SIZE: int = 3 + 2 * len(CARD_INFO)
+	STATE_SIZE: int = 3 + 2 * len(CARD_INFO) 
 
 	def get_player_score(self, player_id: int) -> int:
 		# TODO: Implement other scoring rules
@@ -199,31 +199,63 @@ class PlayerDecision:
 		else:
 			return False
 
+	CARD_OFFSET = 21
+
 	# Encoded Player Decision:
 	# 
 	# Length          Type
-	# 1:              Draw card
-	# len(CARD_INFO): Place card in queue 0
-	# len(CARD_INFO): Place card in queue 1
-	# 2:              Shop decision (First or second item)
+	#  1: Draw card
+	# 21: Place card in queue 0
+	#   - 7: 1
+	#   - 3: 2
+	#   - 1: 3
+	#   - 1: LK
+	#   - 2: MD
+	#   - 5: PSN
+	#   - 1: PTN
+	#   - 1: SY
+	# 21: Place card in queue 1
+	#   - 7: 1
+	#   - 3: 2
+	#   - 1: 3
+	#   - 1: LK
+	#   - 2: MD
+	#   - 5: PSN
+	#   - 1: PTN
+	#   - 17: 1
+	#   - 3: 2
+	#   - 1: 3
+	#   - 1: LK
+	#   - 2: MD
+	#   - 5: PSN
+	#   - 1: PTN
+	#   - 1: SY
+	#  2: Shop decision (First or second item)
 	def _encode_action(self) -> int:
-		action_offset = {
-			PlayerDecision.Type.DRAW_CARD: 0,
-			PlayerDecision.Type.PLACE_CARD_IN_QUEUE: 1,
-			PlayerDecision.Type.SHOP_DECISION: 1 + len(CARD_INFO) * 2 + 1,
-		}
-		
 		if self.type == PlayerDecision.Type.DRAW_CARD:
-			return action_offset[self.type]
+			return 0
+
 		elif self.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
-			assert self.card_type
-			assert self.count
-			return action_offset[self.type] + self.card_type.id
+			assert self.queue_id is not None
+			assert self.count is not None
+
+			index = PlayerDecision.CARD_OFFSET * self.queue_id
+
+			for card_type, card_count in CARD_INFO:
+				if card_type == self.card_type:
+					break
+
+				index += card_count
+
+			index += self.count - 1
+			return index + 1
+
 		elif self.type == PlayerDecision.Type.SHOP_DECISION:
-			assert self.item_id
-			return action_offset[self.type] + self.item_id
+			assert self.item_id is not None
+			return 1 + 2 * PlayerDecision.CARD_OFFSET + self.item_id
+
 		else:
-			assert False
+			assert False, "Invalid player decision type"
 
 	def encode_action(self) -> int:
 		action = self._encode_action()
@@ -232,7 +264,7 @@ class PlayerDecision:
 
 	@staticmethod
 	def state_space_size() -> int:
-		return 1 + len(CARD_INFO) * 2 + 2
+		return 1 + 2 * PlayerDecision.CARD_OFFSET + 2
 
 	@staticmethod
 	def from_encoded_action(encoded_action: int) -> "PlayerDecision":
@@ -240,29 +272,28 @@ class PlayerDecision:
 
 		if encoded_action == 0:
 			return PlayerDecision(PlayerDecision.Type.DRAW_CARD)
-
+		
 		encoded_action -= 1
 
+		if encoded_action < PlayerDecision.CARD_OFFSET * 2:
+			if encoded_action < PlayerDecision.CARD_OFFSET:
+				queue_id = 0
+			else:
+				queue_id = 1
 
-		if 0 <= encoded_action and encoded_action < len(CARD_INFO):
-			card_type_id = encoded_action
-			card_type = CardType.from_id(card_type_id)
+			encoded_action %= PlayerDecision.CARD_OFFSET
 
-			return PlayerDecision(PlayerDecision.Type.PLACE_CARD_IN_QUEUE, card_type, 1, queue_id=0)
+			for card_type, card_count in CARD_INFO:
+				if encoded_action < card_count:
+					return PlayerDecision(PlayerDecision.Type.PLACE_CARD_IN_QUEUE, card_type=card_type, count=encoded_action + 1, queue_id=queue_id)
+				encoded_action -= card_count
 
-		encoded_action -= len(CARD_INFO)
+		encoded_action -= PlayerDecision.CARD_OFFSET * 2
 
-		if 0 <= encoded_action and encoded_action < len(CARD_INFO):
-			card_type_id = encoded_action
-			card_type = CardType.from_id(card_type_id)
-
-			return PlayerDecision(PlayerDecision.Type.PLACE_CARD_IN_QUEUE, card_type, 1, queue_id=1)
-
-
-		encoded_action -= len(CARD_INFO)
-		
-		if 0 <= encoded_action and encoded_action < 2:
-			return PlayerDecision(PlayerDecision.Type.SHOP_DECISION, item_id=encoded_action)
+		if encoded_action == 0:
+			return PlayerDecision(PlayerDecision.Type.SHOP_DECISION, item_id=0)
+		elif encoded_action == 1:
+			return PlayerDecision(PlayerDecision.Type.SHOP_DECISION, item_id=1)
 
 		assert False, "Invalid encoded action"
 
@@ -828,22 +859,24 @@ def get_legal_moves(game_state: GameState, player_id: int) -> npt.NDArray[np.flo
 	if game_state.state == GameStep.STATE_TURN_0 or game_state.state == GameStep.STATE_TURN_1:
 		# Can we draw a card?
 		index = 0
-
 		actions[index] = sum(game_state.player_states[player_id].deck.values()) > 0
+
 		index += 1
 
-		# Can we place a card in the queue #0
-		for (card_type, _) in CARD_INFO:
-			actions[index] = game_state.player_states[player_id].hand.get(card_type, 0) > 0
-			index += 1
+		# Can we place a card in the queue #2
+		for card_type, card_count in CARD_INFO:
+			for j in range(1, card_count + 1):
+				actions[index] = game_state.player_states[player_id].hand.get(card_type, 0) >= j
+				index += 1
 
 		# Can we place a card in the queue #1 
-		for (card_type, _) in CARD_INFO:
-			actions[index] = game_state.player_states[player_id].hand.get(card_type, 0) > 0
-			index += 1
+		for card_type, card_count in CARD_INFO:
+			for j in range(1, card_count + 1):
+				actions[index] = game_state.player_states[player_id].hand.get(card_type, 0) >= j
+				index += 1
 
 	elif game_state.state == GameStep.STATE_SHOP_0_DECISION or game_state.state == GameStep.STATE_SHOP_1_DECISION:
-		index = 1 + 2 * len(CARD_INFO)
+		index = 1 + 2 * PlayerDecision.CARD_OFFSET
 
 		shop = game_state.shops[0] if game_state.state == GameStep.STATE_SHOP_0_DECISION else game_state.shops[1]
 		# We don't have to check whether current player is winning in the shop, as the player can only make a decision if they are winning
@@ -880,36 +913,13 @@ class RandomPlayer(Player):
 		return "RandomPlayer"
 
 	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
-		if game_state.state in [GameStep.STATE_SHOP_0_DECISION, GameStep.STATE_SHOP_1_DECISION]:
-			if game_state.state == GameStep.STATE_SHOP_0_DECISION:
-				shop_id = 0
-			else:
-				shop_id = 1
+		legal_actions = get_legal_moves(game_state, player_id)
+		legal_indices = np.argwhere(legal_actions != 0).flatten()
 
-			shop = game_state.shops[shop_id]
-			return PlayerDecision(PlayerDecision.Type.SHOP_DECISION, item_id=random.randint(0, len(shop.items) - 1))
+		decision = PlayerDecision.from_encoded_action(random.choice(legal_indices))
 
-		possible_decision_types: List[int] = []
-
-		if sum(game_state.player_states[player_id].deck.values()) > 0:
-			possible_decision_types.append(PlayerDecision.Type.DRAW_CARD)
-
-		if sum(game_state.player_states[player_id].hand.values()) > 0:
-			possible_decision_types.append(PlayerDecision.Type.PLACE_CARD_IN_QUEUE)
-
-		assert len(possible_decision_types) > 0, "Player cannot play"
-
-		type = random.choice(possible_decision_types)
-
-		if type == PlayerDecision.Type.DRAW_CARD:
-			return PlayerDecision(PlayerDecision.Type.DRAW_CARD)
-		else:
-			player_state = game_state.player_states[player_id]
-			card_type = random.choice(list(player_state.hand.keys()))
-			count = random.randint(1, player_state.hand[card_type])
-			# queue_id = random.randint(0, 1) # TODO: Limit to 1 queue for now
-			queue_id = 0
-			return PlayerDecision(PlayerDecision.Type.PLACE_CARD_IN_QUEUE, card_type, count, queue_id=queue_id)
+		assert decision is not None
+		return decision
 
 class AlwaysFirstPlayer(Player):
 
@@ -938,18 +948,25 @@ class AlwaysLastPlayer(Player):
 		return decision
 
 
+def test_decision_encoding_decoding() -> None:
+	for i in range(PlayerDecision.state_space_size()):
+		decision = PlayerDecision.from_encoded_action(i)
+		assert decision.encode_action() == i, f"Decoding and encoding failed for {decision}"
+		assert PlayerDecision.from_encoded_action(decision.encode_action()) == decision
+
 if __name__ == "__main__":
-	score = 0
+	# score = 0
+	# test_decision_encoding_decoding()
 
-	for i in tqdm.tqdm(range(1000)):
-		game = initialize_game_state()
-		play_game(game, RandomPlayer(), RandomPlayer())
+	# # for i in tqdm.tqdm(range(1000)):
+	game = initialize_game_state()
+	play_game(game, RandomPlayer(), RandomPlayer(), verbose=False)
 
-		assert game_is_over(game)
+	assert game_is_over(game)
 
-		score += get_game_score(game)
+	# score += get_game_score(game)
 
-	print(f"Average score: {score / 1000}")
+	# print(f"Average score: {score / 1000}")
 
 
 STATE_SIZE = len(initialize_game_state().to_state_array(0))
