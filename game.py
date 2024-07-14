@@ -80,17 +80,6 @@ class PlayerState:
 	deck: Dict[CardType, int] = field(default_factory=dict)
 	points: int = 0
 
-	def to_state_array(self, private: bool) -> List[int]:
-		state: List[int] = [
-			self.points,
-			sum(self.deck.values()),
-		]
-
-		for card_type, _ in CARD_INFO:
-			state.append(self.hand.get(card_type, 0))
-
-		return state
-
 	STATE_SIZE = 2 + len(CARD_INFO)
 
 	def to_state_array_fast(self, array: npt.NDArray[np.float32], index: int, private: bool) -> None:
