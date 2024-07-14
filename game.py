@@ -465,6 +465,8 @@ def initialize_game_state() -> GameState:
 	return game_state
 
 def run_shop_until(game_state: GameState, shop_id: int, player_id: int) -> None:
+	assert game_state.state in [GameStep.STATE_SHOP_0, GameStep.STATE_SHOP_1]
+	
 	shop = game_state.shops[shop_id]
 
 	score0 = shop.get_player_score(0)
@@ -521,6 +523,11 @@ def run_shop_until(game_state: GameState, shop_id: int, player_id: int) -> None:
 			return
 		elif items_to_draw >= 2:
 			shop.items = [draw_from_deck(game_state.items_deck), draw_from_deck(game_state.items_deck)]
+
+			if shop_id == 0:
+				game_state.state = GameStep.STATE_SHOP_1
+			else:
+				game_state.state = GameStep.STATE_TURN_0
 		else:
 			# items_to_draw == 1 is not possible, as we number of items in deck is always even
 			assert False, "Invalid game state"
@@ -560,6 +567,8 @@ def get_game_score(game_state: GameState) -> int:
 	return ai_player.points - npc_player.points
 
 def print_game_state(game_state: GameState) -> None:
+	print()
+
 	def hand_state(hand: Dict[CardType, int]) -> str:
 		return ' '.join([f'{card_type.name}x{count}' for card_type, count in hand.items()])
 
@@ -620,7 +629,10 @@ def play_game_until_decision(game_state: GameState) -> None:
 	def game_step(game_state: GameState, player_id: int) -> None:
 		assert game_state.turn == player_id
 
-		if game_state.state in [GameStep.STATE_START, GameStep.STATE_SHOP_0]:
+		if game_state.state == GameStep.STATE_START:
+			game_state.state = GameStep.STATE_SHOP_0
+
+		if game_state.state == GameStep.STATE_SHOP_0:
 			run_shop_until(game_state, 0, player_id)
 		elif game_state.state == GameStep.STATE_SHOP_1:
 			run_shop_until(game_state, 1, player_id)
