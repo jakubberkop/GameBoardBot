@@ -140,6 +140,71 @@ class SimplePlayer(RandomPlayer):
 
 class HumanPlayer(Player):
 
+	TEXT_TO_DECISION: List[str] = [
+		"D",
+		"1x1Q1",
+		"1x2Q1",
+		"1x3Q1",
+		"1x4Q1",
+		"1x5Q1",
+		"1x6Q1",
+		"1x7Q1",
+		"2x1Q1",
+		"2x2Q1",
+		"2x3Q1",
+		"3x1Q1",
+		"LKx1Q1",
+		"MDx1Q1",
+		"MDx2Q1",
+		"PSNx1Q1",
+		"PSNx2Q1",
+		"PSNx3Q1",
+		"PSNx4Q1",
+		"PSNx5Q1",
+		"PTNx1Q1",
+		"SYx1Q1",
+		"1x1Q2",
+		"1x2Q2",
+		"1x3Q2",
+		"1x4Q2",
+		"1x5Q2",
+		"1x6Q2",
+		"1x7Q2",
+		"2x1Q2",
+		"2x2Q2",
+		"2x3Q2",
+		"3x1Q2",
+		"LKx1Q2",
+		"MDx1Q2",
+		"MDx1Q2",
+		"PSNx1Q2",
+		"PSNx2Q2",
+		"PSNx3Q2",
+		"PSNx4Q2",
+		"PSNx5Q2",
+		"PTNx1Q2",
+		"SYx1Q2",
+		"I0",
+		"I1"
+	]
+
+	def decision_text_to_id(self, text: str) -> Optional[int]:
+		try:
+			return int(text)
+		except ValueError:
+			pass
+		except IndexError:
+			pass
+		try:
+			decision_text = text.upper()
+			return HumanPlayer.TEXT_TO_DECISION.index(decision_text)
+		except ValueError:
+			pass
+		except IndexError:
+			pass
+		
+		return None
+
 	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
 
 		while True:
@@ -147,29 +212,28 @@ class HumanPlayer(Player):
 			print("Possible decisions:")
 			legal_moves = get_legal_moves(game_state, player_id)
 
-			# Print legal moves
-			for i, move in enumerate(legal_moves):
-				if move:
-					# TODO: This crashes
-					print(f"{i}: {PlayerDecision.from_encoded_action(i)}")
+			for index, legal in enumerate(legal_moves):
+				if legal == 1.0:
+					print(f"{index:3}: {HumanPlayer.TEXT_TO_DECISION[index]:7} {PlayerDecision.from_encoded_action(index)}")
 
-			decision = input("Decision number:")
+			decision_text = input("Decision number:")
+			decision_text = decision_text.strip()
 
-			try:
-				decision = int(decision)
+			decision_id = self.decision_text_to_id(decision_text)
 
-				if legal_moves[decision]:
-					break
-			except ValueError:
-				pass
-			except IndexError:
-				pass
+			if decision_id is None:
+				print("Invalid decision")
+				continue
 
-			print("Invalid decision")
+			if legal_moves[decision_id] != 1.0:
+				print("Ilegal decision")
+				continue
 
-		player_decision = PlayerDecision.from_encoded_action(decision)
-		assert player_decision is not None
-		return player_decision
+			break
+
+		decision = PlayerDecision.from_encoded_action(decision_id)
+		assert decision is not None
+		return decision
 
 	def name(self) -> str:
 		return "Human Player"
@@ -224,10 +288,9 @@ def main():
 
 def human_game():
 	game = initialize_game_state()
-	computer = RandomPlayer()
-	# human = HumanPlayer()
-	human = SimplePlayer()
-	play_game(game, computer, human, skip_shop_decisions=True, verbose=True)
+	human = HumanPlayer()
+	computer = PPOPlayer()
+	play_game(game, computer, human, verbose=True)
 
 def evaluate_t():
 	game = initialize_game_state()
