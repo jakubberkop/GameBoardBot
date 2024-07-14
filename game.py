@@ -730,10 +730,7 @@ def play_game_until_decision_one_player_that_is_not_a_shop_decision(game_state: 
 
 		return
 
-def play_game(game_state: GameState, player0: Player, player_1: Player, verbose: bool = False, skip_shop_decisions: bool = False) -> None:
-	def run_shop_decision(game_state: GameState) -> None:
-		decision = AlwaysFirstPlayer().run_player_decision(game_state, game_state.turn)
-		set_decision(game_state, decision, game_state.turn)
+def play_game(game_state: GameState, player0: Player, player_1: Player, verbose: bool = False) -> None:
 
 	while not game_is_over(game_state):
 		play_game_until_decision(game_state)
@@ -743,12 +740,6 @@ def play_game(game_state: GameState, player0: Player, player_1: Player, verbose:
 
 		if game_is_over(game_state):
 			return
-
-		if game_state.state in [GameStep.STATE_SHOP_0_DECISION, GameStep.STATE_SHOP_1_DECISION]:
-			if skip_shop_decisions:
-				run_shop_decision(game_state)
-				continue
-
 		if game_state.turn == AI_PLAYER_ID:
 			decision = player0.run_player_decision(game_state, AI_PLAYER_ID)
 			set_decision(game_state, decision, AI_PLAYER_ID)
