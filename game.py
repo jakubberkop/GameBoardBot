@@ -38,16 +38,10 @@ class CardType:
 		elif self.name == "PTN":
 			return 1
 		elif self.name == "SY":
-			return 1
+			return 0
 		else:
 			assert False, "Invalid card type"
 
-	@staticmethod
-	def from_id(id: int) -> Optional["CardType"]:
-		for card_type, _ in CARD_INFO:
-			if card_type.id == id:
-				return card_type
-		return None
 
 @dataclass
 class Item:
@@ -113,8 +107,22 @@ class ShopState:
 	STATE_SIZE: int = 3 + 2 * len(CARD_INFO) 
 
 	def get_player_score(self, player_id: int) -> int:
-		# TODO: Implement other scoring rules
-		score = sum(queue_item.card_type.value * queue_item.count for queue_item in self.queue if queue_item.player_id == player_id)
+		score = 0
+
+		# LK changes counting completely
+		if any(queue_item.card_type.name == "LK" for queue_item in self.queue):
+			# LK counting rules
+			score = sum(queue_item.count for queue_item in self.queue if queue_item.player_id == player_id)
+		else:
+			# Normal counting rules
+
+			# Sum of all non PSN cards
+			score = sum(queue_item.card_type.value * queue_item.count for queue_item in self.queue if queue_item.player_id == player_id and queue_item.card_type.name != "PSN")
+
+			# Count number of PSN.
+			psn_count = sum(queue_item.count for queue_item in self.queue if queue_item.card_type.name == "PSN" and queue_item.player_id == player_id)
+			# Count score of PSN given by the (N * (N+1)) / 2 formula
+			score += (psn_count * (psn_count + 1)) // 2
 
 		if self.limbo_item and self.limbo_item.player_id == player_id:
 			score -= self.limbo_item.item.value
