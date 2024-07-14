@@ -24,11 +24,13 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    oponent_types = [RandomPlayer, AlwaysFirstPlayer, AlwaysLastPlayer]
+
     if args.n == 1:
-        env = GameEnv(RandomPlayer)
+        env = GameEnv(oponent_types)
         env = Monitor(env)
     else:
-        env = sb3_vec_env.DummyVecEnv([lambda: GameEnv(RandomPlayer) for _ in range(args.n)])
+        env = sb3_vec_env.DummyVecEnv([lambda: GameEnv(oponent_types) for _ in range(args.n)])
         env = sb3_vec_env.VecMonitor(env)
         # env = sb3_vec_env.SubprocVecEnv([lambda: GameEnv() for _ in range(args.n)])
 

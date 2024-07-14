@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from enum import IntEnum
 import random
-from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple
+from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple, Type
 
 import tqdm
 import numpy as np
@@ -409,6 +409,8 @@ Shop 1: {self.shops[1]}
 """
 
 class Player:
+
+	T = Type["Player"]
 
 	def name(self) -> str:
 		return False, "Not implemented" # type: ignore

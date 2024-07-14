@@ -1,9 +1,9 @@
-from typing import Any, Dict
+from typing import Any, Dict, List
 import gymnasium as gym
 import numpy as np
 import numpy.typing as npt
 
-from game import AI_PLAYER_ID, GameStep, AlwaysLastPlayer, PlayerDecision, game_is_over, get_game_score, get_legal_moves, initialize_game_state, play_game_until_decision_one_player_that_is_not_a_shop_decision, print_game_state, set_decision
+from game import AI_PLAYER_ID, GameStep, AlwaysLastPlayer, Player, PlayerDecision, game_is_over, get_game_score, get_legal_moves, initialize_game_state, play_game_until_decision_one_player_that_is_not_a_shop_decision, print_game_state, set_decision
 
 
 class GameEnv(gym.Env):
@@ -13,9 +13,9 @@ class GameEnv(gym.Env):
         "render_fps": 50,
     }
 
-	def __init__(self, player_type: type = AlwaysLastPlayer):
+	def __init__(self, player_types: List[Player.T] = [AlwaysLastPlayer]):
 		self.game_state = initialize_game_state()
-		self.player_type = player_type
+		self.player_types = player_types
 
 		state_len = len(self.game_state.to_state_array(AI_PLAYER_ID))
 
@@ -56,7 +56,9 @@ class GameEnv(gym.Env):
 
 		self.game_state = initialize_game_state()
 		
-		self.oponent = self.player_type()
+		player_type = self.player_types[self.np_random.integers(0, len(self.player_types))]
+		self.oponent = player_type()
+
 		play_game_until_decision_one_player_that_is_not_a_shop_decision(self.game_state, self.oponent)
 
 		observation = self.get_obs()
