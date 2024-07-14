@@ -1,4 +1,5 @@
 import os
+import argparse
 
 from typing import Sequence
 
@@ -265,26 +266,18 @@ class PPOPlayer(Player):
 		return f"PPO: {self.model_name[-10:]}"
 
 
-# @pytracy.mark_function
-def main():
+def main(n: int):
 	players = [
-		# HumanPlayer(),
-		# RandomPlayer(),
+		RandomPlayer(),
 		AlwaysFirstPlayer(),
 		AlwaysLastPlayer(),
-		# SimplePlayer(),
+		SimplePlayer(),
 		# TransformerPlayer(),
-		# SimplePlayer(),
 		# PPOPlayer("ppo_mask_fixed_reward_500000"),
 		# PPOPlayer("ppo_mask_5000"),
 		PPOPlayer() # Newest model
 	]
-	import time
-	a = time.time()
-	evaluate_players(players)
-	b = time.time()
-	print(b-a)
-
+	evaluate_players(players, n)
 
 def human_game():
 	game = initialize_game_state()
@@ -292,14 +285,20 @@ def human_game():
 	computer = PPOPlayer()
 	play_game(game, computer, human, verbose=True)
 
-def evaluate_t():
-	game = initialize_game_state()
-	# tran = TransformerPlayer()
-	random = RandomPlayer()
-	play_game(game, tran, random, skip_shop_decisions=True, verbose=True)
+	winner = "Human" if game.player_states[1].points > game.player_states[0].points else "Computer"
+	print(f"Game over. {winner} won")
 
+	print_game_state(game)
 
 if __name__ == "__main__":
-	main()
-	# human_game()
-	# evaluate_t()
+	parser = argparse.ArgumentParser()
+
+	parser.add_argument("mode", choices=["evaluate", "human"], default="evaluate", help="Mode to run the program in")
+	parser.add_argument("-n", type=int, default=100, help="Number of games to play")
+
+	args = parser.parse_args()
+
+	if args.mode == "evaluate":
+		main(args.n)
+	elif args.mode == "human":
+		human_game()
