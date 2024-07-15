@@ -66,6 +66,12 @@ class SimplePlayer(RandomPlayer):
 		return "Simple Player"
 
 	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
+		decision = self._run_player_decision(game_state, player_id)
+		action_is_legal = get_legal_moves(game_state, player_id)[decision.encode_action()] == 1.0
+		assert action_is_legal, "Illegal action"
+		return decision
+
+	def _run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
 		if game_state.state in [GameStep.STATE_SHOP_0_DECISION, GameStep.STATE_SHOP_1_DECISION]:
 			if game_state.state == GameStep.STATE_SHOP_0_DECISION:
 				shop_id = 0
@@ -274,7 +280,7 @@ def main(n: int):
 		RandomPlayer(),
 		AlwaysFirstPlayer(),
 		AlwaysLastPlayer(),
-		SimplePlayer(),
+		# SimplePlayer(),
 		# TransformerPlayer(),
 		# PPOPlayer("ppo_mask_fixed_reward_500000"),
 		# PPOPlayer("ppo_mask_5000"),
