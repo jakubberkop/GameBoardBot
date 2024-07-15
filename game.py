@@ -173,7 +173,8 @@ class PlayerDecision:
 	class Type(IntEnum):
 		DRAW_CARD = 0
 		PLACE_CARD_IN_QUEUE = 1
-		SHOP_DECISION = 2 # Shop decision is commented for now
+		SHOP_DECISION = 2
+		SKIP_2_TURN = 3
 
 	type: Type
 
@@ -225,7 +226,10 @@ class PlayerDecision:
 	#   - 5: PSN
 	#   - 1: PTN
 	#   - 1: SY
-	#  2: Shop decision (First or second item)
+	#  2: Shop decision
+	#   - 0: First item
+	#   - 1: Second item
+	#  1: End turn (only when in turn 2, MD only turn)
 	def _encode_action(self) -> int:
 		if self.type == PlayerDecision.Type.DRAW_CARD:
 			return 0
@@ -248,7 +252,8 @@ class PlayerDecision:
 		elif self.type == PlayerDecision.Type.SHOP_DECISION:
 			assert self.item_id is not None
 			return 1 + 2 * PlayerDecision.CARD_OFFSET + self.item_id
-
+		elif self.type == PlayerDecision.Type.SKIP_2_TURN:
+			return 1 + 2 * PlayerDecision.CARD_OFFSET + 2
 		else:
 			assert False, "Invalid player decision type"
 
@@ -259,7 +264,7 @@ class PlayerDecision:
 
 	@staticmethod
 	def state_space_size() -> int:
-		return 1 + 2 * PlayerDecision.CARD_OFFSET + 2
+		return 1 + 2 * PlayerDecision.CARD_OFFSET + 2 + 1
 
 	@staticmethod
 	def from_encoded_action(encoded_action: int) -> "PlayerDecision":
@@ -289,6 +294,8 @@ class PlayerDecision:
 			return PlayerDecision(PlayerDecision.Type.SHOP_DECISION, item_id=0)
 		elif encoded_action == 1:
 			return PlayerDecision(PlayerDecision.Type.SHOP_DECISION, item_id=1)
+		elif encoded_action == 2:
+			return PlayerDecision(PlayerDecision.Type.SKIP_2_TURN)
 
 		assert False, "Invalid encoded action"
 
@@ -306,6 +313,9 @@ class PlayerDecision:
 		if self.type == PlayerDecision.Type.SHOP_DECISION:
 			return self.item_id == other.item_id and self.queue_id == other.queue_id
 		
+		if self.type == PlayerDecision.Type.SKIP_2_TURN:
+			return True
+
 		assert False
 
 	def __str__(self):
@@ -313,10 +323,10 @@ class PlayerDecision:
 			return f"Draw card"
 		elif self.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
 			return f"Place {self.card_type.name}x{self.count} in queue {self.queue_id}"
-		
-		# TODO: Shop decision is commented for now
 		elif self.type == PlayerDecision.Type.SHOP_DECISION:
 			return f"Place item {self.item_id} in shop"
+		elif self.type == PlayerDecision.Type.SKIP_2_TURN:
+			return f"Skip 2 turn"
 		else:
 			assert False
 
@@ -336,8 +346,7 @@ class GameStep(IntEnum):
 
 DECISION_STATES: Set[GameStep] = {
 	GameStep.STATE_SHOP_0_DECISION, GameStep.STATE_SHOP_1_DECISION, 
-	GameStep.STATE_TURN_0, GameStep.STATE_TURN_1,
-	# GameStep.STATE_TURN_2 #TODO: Implement GameStep.STATE_TURN_2
+	GameStep.STATE_TURN_0, GameStep.STATE_TURN_1, GameStep.STATE_TURN_2
 }
 
 END_GAME_STATES: Set[GameStep] = {
@@ -586,11 +595,7 @@ def play_game_until_decision(game_state: GameState) -> None:
 		elif game_state.state == GameStep.STATE_TURN_1:
 			pass
 		elif game_state.state == GameStep.STATE_TURN_2:
-			game_state.state = GameStep.STATE_END_TURN
-			if game_is_over(game_state):
-				game_state.state = GameStep.STATE_END
-				game_state.end_game = True
-				return
+			pass
 		elif game_state.state == GameStep.STATE_END:
 			pass
 		elif game_state.state == GameStep.STATE_ERROR:
@@ -740,10 +745,13 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 		game_state.state = GameStep.STATE_TURN_0
 		return
 
-	elif game_state.state == GameStep.STATE_TURN_0 or game_state.state == GameStep.STATE_TURN_1:
+	elif game_state.state in [GameStep.STATE_TURN_0, GameStep.STATE_TURN_1, GameStep.STATE_TURN_2]:
+		md_only_state = game_state.state == GameStep.STATE_TURN_2
 		player_state = game_state.player_states[player_id]
 
 		if decision.type == PlayerDecision.Type.DRAW_CARD:
+			assert not md_only_state, "MD card can't be drawn in this turn"
+
 			if sum(player_state.deck.values()) == 0:
 				game_state.state = GameStep.STATE_ERROR
 				return
@@ -752,6 +760,10 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 			player_state.hand[draw_card] += 1
 
 		elif decision.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
+			if md_only_state and decision.card_type.name != "MD":
+				game_state.state = GameStep.STATE_ERROR
+				return
+
 			if player_state.hand[decision.card_type] < decision.count:
 				game_state.state = GameStep.STATE_ERROR
 				return
@@ -762,35 +774,39 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 				del player_state.hand[decision.card_type]
 
 			game_state.shops[decision.queue_id].queue.append(QueueItem(decision.card_type, decision.count, player_id))
+		
+		elif decision.type == PlayerDecision.Type.SKIP_2_TURN:
+			# When the player skips the turn, the game state should be set to the next turn
+			# as it player has played the MD card
+			pass
 		else:
 			game_state.state = GameStep.STATE_ERROR
 			return
 
+		# Changing of the turns after the decision
+
 		if game_state.state == GameStep.STATE_TURN_0:
 			game_state.state = GameStep.STATE_TURN_1
 		elif game_state.state == GameStep.STATE_TURN_1:
+			player_has_md_card = player_state.hand.get(CardType("MD", 4), 0) > 0
 
-		# TODO: Implement GameStep.STATE_TURN_2
-		# 	game_state.state = GameStep.STATE_TURN_2
-		# elif game_state.state == GameStep.STATE_TURN_2:
+			if player_has_md_card:
+				game_state.state = GameStep.STATE_TURN_2
+			else:
+				game_state.state = GameStep.STATE_END_TURN
 
+		elif game_state.state == GameStep.STATE_TURN_2:
 			game_state.state = GameStep.STATE_END_TURN
-
-			if game_is_over(game_state):
-				game_state.state = GameStep.STATE_END
-				game_state.end_game = True
-				return
-
-			# # Turn change logic
-			# if game_state.turn == AI_PLAYER_ID:
-			# 	game_state.turn = NPC_PLAYER_ID
-			# else:
-			# 	game_state.turn = AI_PLAYER_ID
-			# game_state.turn_counter += 1
-			# game_state.state = GameStep.STATE_SHOP_0
 
 		else:
 			assert False, "Invalid game state"
+
+		# DO NOT REMOVE, as this is load bearing code
+		# Game end conditions are not verified to be correct
+		if game_is_over(game_state):
+			game_state.state = GameStep.STATE_END
+			game_state.end_game = True
+			return
 
 		return
 
@@ -804,24 +820,44 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 def get_legal_moves(game_state: GameState, player_id: int) -> npt.NDArray[np.float32]:
 	actions = np.zeros(PlayerDecision.state_space_size(), dtype=np.float32)
 
-	if game_state.state == GameStep.STATE_TURN_0 or game_state.state == GameStep.STATE_TURN_1:
+	if game_state.state in [GameStep.STATE_TURN_0, GameStep.STATE_TURN_1, GameStep.STATE_TURN_2]:
+		# Only MD card can be played in the third turn
+		md_only_turn = game_state.state == GameStep.STATE_TURN_2
+
 		# Can we draw a card?
 		index = 0
-		actions[index] = sum(game_state.player_states[player_id].deck.values()) > 0
+
+		if not md_only_turn:
+			actions[index] = sum(game_state.player_states[player_id].deck.values()) > 0
 
 		index += 1
 
 		# Can we place a card in the queue #2
 		for card_type, card_count in CARD_INFO:
 			for j in range(1, card_count + 1):
-				actions[index] = game_state.player_states[player_id].hand.get(card_type, 0) >= j
+				# If we are in md_only_turn, we can only place MD cards.
+				# In all other cases, we can place any card
+				can_place_card = (md_only_turn and card_type.name == "MD") or not md_only_turn
+				if can_place_card:
+					actions[index] = game_state.player_states[player_id].hand.get(card_type, 0) >= j
+
 				index += 1
 
 		# Can we place a card in the queue #1 
 		for card_type, card_count in CARD_INFO:
 			for j in range(1, card_count + 1):
-				actions[index] = game_state.player_states[player_id].hand.get(card_type, 0) >= j
+				# If we are in md_only_turn, we can only place MD cards.
+				# In all other cases, we can place any card
+				can_place_card = (md_only_turn and card_type.name == "MD") or not md_only_turn
+				if can_place_card:
+					actions[index] = game_state.player_states[player_id].hand.get(card_type, 0) >= j
+
 				index += 1
+
+		index += 2 # skip shop decisions
+
+		# Can we skip the turn - are we in the second turn <=> have MD card
+		actions[index] = md_only_turn
 
 	elif game_state.state == GameStep.STATE_SHOP_0_DECISION or game_state.state == GameStep.STATE_SHOP_1_DECISION:
 		index = 1 + 2 * PlayerDecision.CARD_OFFSET
@@ -835,18 +871,8 @@ def get_legal_moves(game_state: GameState, player_id: int) -> npt.NDArray[np.flo
 		if shop.get_item_count() == 2:
 			actions[index + 0] = 1
 			actions[index + 1] = 1
-	elif game_state.state == GameStep.STATE_TURN_2:
-		# Only MD card can be played in the third turn
-		has_one_md = game_state.player_states[player_id].hand.get(CardType("MD", 4), 0) > 0
-
-		if has_one_md:
-			index_of_md_in_card_info = CARD_INFO.index((CardType("MD", 4), 2))
-
-			# First queue
-			actions[1 + index_of_md_in_card_info] = 1
-
-			# Second queue
-			actions[1 + len(CARD_INFO) + index_of_md_in_card_info] = 1
+		else:
+			assert False, "Invalid shop state for decision"
 
 	elif game_state.state in END_GAME_STATES or game_state.state == GameStep.STATE_START:
 		pass # No legal moves when game is over or not started

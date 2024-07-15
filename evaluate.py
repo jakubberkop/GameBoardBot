@@ -186,8 +186,11 @@ class HumanPlayer(Player):
 		"PTNx1Q2",
 		"SYx1Q2",
 		"I0",
-		"I1"
+		"I1",
+		"S"
 	]
+
+	assert len(TEXT_TO_DECISION) == PlayerDecision.state_space_size()
 
 	def decision_text_to_id(self, text: str) -> Optional[int]:
 		try:
