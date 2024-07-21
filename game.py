@@ -176,6 +176,7 @@ class PlayerDecision:
 		SHOP_DECISION = 2
 		SKIP_2_TURN = 3
 		PTN_REPLACE_IN_QUEUE = 4
+		SY_REPLACE_IN_QUEUE = 5
 
 	type: Type
 
@@ -249,7 +250,7 @@ class PlayerDecision:
 	#    - Q1: 
 	#     - P0:
 	#     - P1:
-	# TODO: Implement SY card
+	# 7: SY replaces itself with a card from another queue
 	def _encode_action(self) -> int:
 		if self.type == PlayerDecision.Type.DRAW_CARD:
 			return 0
@@ -283,17 +284,31 @@ class PlayerDecision:
 			ptn_decision_offset = (self.queue_id * 2 * len(CARD_INFO)) + (self.player_id * len(CARD_INFO)) + self.card_type.id
 
 			return offset + ptn_decision_offset
+		elif self.type == PlayerDecision.Type.SY_REPLACE_IN_QUEUE:
+			assert self.card_type is not None
+			offset = 1 + 2 * PlayerDecision.CARD_OFFSET + 2 + 1 + len(CARD_INFO) * 2 * 2
+
+			for card_type, card_count in CARD_INFO:
+				if card_type == self.card_type:
+					break
+					
+				if card_type.name == "SY":
+					continue # Skip SY
+
+				offset += 1
+
+			return offset	
 		else:
 			assert False, "Invalid player decision type"
 
 	def encode_action(self) -> int:
 		action = self._encode_action()
-		assert action >= 0 and action < self.state_space_size()
+		assert action >= 0 and action < self.state_space_size(), f"Invalid action {action} {self.state_space_size()}"
 		return action
 
 	@staticmethod
 	def state_space_size() -> int:
-		return 1 + 2 * PlayerDecision.CARD_OFFSET + 2 + 1 + len(CARD_INFO) * 2 * 2
+		return 1 + 2 * PlayerDecision.CARD_OFFSET + 2 + 1 + len(CARD_INFO) * 2 * 2 + (len(CARD_INFO) - 1)
 
 	@staticmethod
 	def from_encoded_action(encoded_action: int) -> "PlayerDecision":
@@ -331,17 +346,25 @@ class PlayerDecision:
 			return PlayerDecision(PlayerDecision.Type.SKIP_2_TURN)
 		encoded_action -= 1
 
-		card_id = encoded_action % len(CARD_INFO)
-		encoded_action //= len(CARD_INFO)
+		if encoded_action < len(CARD_INFO) * 2 * 2:
+			card_id = encoded_action % len(CARD_INFO)
+			encoded_action //= len(CARD_INFO)
 
-		player_id = encoded_action % 2
-		queue_id = encoded_action // 2
+			player_id = encoded_action % 2
+			queue_id = encoded_action // 2
 
-		assert card_id >= 0 and card_id < len(CARD_INFO)
-		assert queue_id == 0 or queue_id == 1
-		assert player_id == 0 or player_id == 1
+			assert card_id >= 0 and card_id < len(CARD_INFO)
+			assert queue_id == 0 or queue_id == 1
+			assert player_id == 0 or player_id == 1
 
-		return PlayerDecision(PlayerDecision.Type.PTN_REPLACE_IN_QUEUE, card_type=CARD_INFO[card_id][0], queue_id=queue_id, player_id=player_id)
+			return PlayerDecision(PlayerDecision.Type.PTN_REPLACE_IN_QUEUE, card_type=CARD_INFO[card_id][0], queue_id=queue_id, player_id=player_id)
+
+		encoded_action -= len(CARD_INFO) * 2 * 2
+
+		assert encoded_action >= 0 and encoded_action < len(CARD_INFO)
+		card_type = CARD_INFO[encoded_action][0]
+
+		return PlayerDecision(PlayerDecision.Type.SY_REPLACE_IN_QUEUE, card_type=card_type)
 
 	def __eq__(self, other: Any):
 		if self.type != other.type:
@@ -362,6 +385,8 @@ class PlayerDecision:
 		if self.type == PlayerDecision.Type.PTN_REPLACE_IN_QUEUE:
 			return self.card_type == other.card_type and self.queue_id == other.queue_id and self.player_id == other.player_id
 
+		if self.type == PlayerDecision.Type.SY_REPLACE_IN_QUEUE:
+			return self.card_type == other.card_type
 
 		assert False
 
@@ -379,6 +404,9 @@ class PlayerDecision:
 			assert self.queue_id is not None
 			assert self.player_id is not None
 			return f"PTN replace {self.card_type.name} in queue {self.queue_id} for player {self.player_id}"
+		elif self.type == PlayerDecision.Type.SY_REPLACE_IN_QUEUE:
+			assert self.card_type is not None
+			return f"SY replace {self.card_type.name} in queue"
 		else:
 			assert False
 
@@ -857,9 +885,30 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 				game_state.state = GameStep.STATE_ERROR
 				return
 
+		elif decision.type == PlayerDecision.Type.SY_REPLACE_IN_QUEUE:
+			queue_id = queue_id_with_sy_card(game_state, player_id)
+
+			assert queue_id is not None
+
+			other_queue_id = 1 - queue_id
+
+			sy_queue = game_state.shops[queue_id].queue
+			other_queue = game_state.shops[other_queue_id].queue
+
+			# Find the card in the queue
+			for i, queue_item in enumerate(sy_queue):
+				if queue_item.card_type == CardType("SY", 8) and queue_item.player_id == player_id:
+					sy_queue[i] = QueueItem(decision.card_type, 1, player_id)
+					break
+
+			# Remove the card from the other queue
+			for i, queue_item in enumerate(other_queue):
+				if queue_item.card_type == decision.card_type and queue_item.player_id == player_id:
+					del other_queue[i]
+					break
 		else:
-			game_state.state = GameStep.STATE_ERROR
-			return
+			assert False, "Invalid decision"
+
 
 		# Changing of the turns after the decision
 
@@ -946,12 +995,30 @@ def get_legal_moves(game_state: GameState, player_id: int) -> npt.NDArray[np.flo
 			return any(queue_item.card_type == card_type and queue_item.player_id == player_id for queue_item in queue)
 
 		# Can we replace a card in each queue with PTN card
-		if player_has_ptn_card:
+		if player_has_ptn_card and not md_only_turn:
 			for queue_id in range(2):
-				for player_id in range(2):
+				for ptn_player_id in range(2):
 					for card_type, card_count in CARD_INFO:
-						actions[index] = card_in_queue(game_state.shops[queue_id].queue, card_type, player_id)
+						actions[index] = card_in_queue(game_state.shops[queue_id].queue, card_type, ptn_player_id)
 						index += 1
+		else:
+			index += len(CARD_INFO) * 2 * 2
+
+		queue_id = queue_id_with_sy_card(game_state, player_id)
+
+		if queue_id is not None and not md_only_turn:
+			# Can we replace a card in the queue with SY card
+			other_queue_id = 1 - queue_id
+
+			for card_type, card_count in CARD_INFO:
+				if card_type.name == "SY":
+					continue
+
+				actions[index] = card_in_queue(game_state.shops[other_queue_id].queue, card_type, player_id)
+				index += 1
+		else:
+			index += len(CARD_INFO) - 1
+
 
 	elif game_state.state == GameStep.STATE_SHOP_0_DECISION or game_state.state == GameStep.STATE_SHOP_1_DECISION:
 		index = 1 + 2 * PlayerDecision.CARD_OFFSET

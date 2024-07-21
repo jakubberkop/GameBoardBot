@@ -226,6 +226,13 @@ class HumanPlayer(Player):
 		"PTNrPSNQ1P1",
 		"PTNrPTNQ1P1",
 		"PTNrSYQ1P1",
+		"SYr1",
+		"SYr2",
+		"SYr3",
+		"SYrLK",
+		"SYrMD",
+		"SYrPSN",
+		"SYrPTN",
 	]
 
 	assert len(TEXT_TO_DECISION) == PlayerDecision.state_space_size()
