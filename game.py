@@ -10,6 +10,8 @@ import numpy.typing as npt
 # from pytracy import *
 # set_tracing_mode(TracingMode.All)
 
+PRIVATE_STATE = True
+
 @dataclass
 class CardType:
 	name: str
@@ -29,17 +31,14 @@ class CardType:
 			return 2
 		elif self.name == "3":
 			return 3
-		elif self.name == "LK":
-			return 1
 		elif self.name == "MD":
 			return 2
-		elif self.name == "PSN":
-			return 1
 		elif self.name == "PTN":
 			return 1
 		elif self.name == "SY":
 			return 0
 		else:
+			# "PSN" and "LK" values don't matter as they are counted differently
 			assert False, "Invalid card type"
 
 
@@ -75,10 +74,14 @@ class PlayerState:
 	points: int = 0
 
 	STATE_SIZE = 2 + len(CARD_INFO)
+	PRIVATE_SIZE = 2
 
-	def to_state_array_fast(self, array: npt.NDArray[np.float32], index: int, private: bool) -> None:
+	def to_state_array_fast(self, array: npt.NDArray[np.float32], index: int, add_private_data: bool = True) -> None:
 		array[index] = self.points
 		array[index+1] = sum(self.deck.values())
+
+		if not add_private_data:
+			return
 
 		for i, (card_type, _) in enumerate(CARD_INFO):
 			array[index+2+i] = self.hand.get(card_type, 0)
@@ -443,7 +446,7 @@ class GameState:
 	shops: List[ShopState] = field(default_factory=list)
 	items_deck: Dict[Item, int] = field(default_factory=dict)
 	end_game: bool = False
-	_state: int = GameStep.STATE_START
+	_state: GameStep = GameStep.STATE_START
 	turn: int = 0
 	turn_counter: int = 0
 
@@ -457,7 +460,13 @@ class GameState:
 		self._state = value
 
 	def to_state_array(self, player_id: int) -> npt.NDArray[np.float32]:
-		state_size = len(GameStep) + 2 * PlayerState.STATE_SIZE + 2 * ShopState.STATE_SIZE + PlayerDecision.state_space_size()
+		state_size = len(GameStep) + 2 * ShopState.STATE_SIZE + PlayerDecision.state_space_size()
+
+		if PRIVATE_STATE:
+			state_size += PlayerState.STATE_SIZE
+			state_size += PlayerState.PRIVATE_SIZE * (len(self.player_states) - 1)
+		else:
+			state_size += PlayerState.STATE_SIZE * len(self.player_states)
 
 		state = np.zeros(state_size, dtype=np.float32)
 		
@@ -466,10 +475,14 @@ class GameState:
 		index = len(GameStep)
 
 		# Player states
-		for player_state in self.player_states:
-			player_state.to_state_array_fast(state, index, player_id == 0)
-			index += PlayerState.STATE_SIZE
-	
+		for i, player_state in enumerate(self.player_states):
+			private_data = i == player_id or not PRIVATE_STATE
+			player_state.to_state_array_fast(state, index, private_data)
+
+			if private_data:
+				index += PlayerState.PRIVATE_SIZE
+			else:
+				index += PlayerState.STATE_SIZE
 
 		# Shop states
 		for shop in self.shops:
