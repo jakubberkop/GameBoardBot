@@ -175,6 +175,7 @@ class PlayerDecision:
 		PLACE_CARD_IN_QUEUE = 1
 		SHOP_DECISION = 2
 		SKIP_2_TURN = 3
+		PTN_REPLACE_IN_QUEUE = 4
 
 	type: Type
 
@@ -186,14 +187,17 @@ class PlayerDecision:
 	# SHOP_DECISION
 	item_id: Optional[int] = None
 
-	# TODO: Implement descision for "PTN"
-	# TODO: Implement MD in 2 turn
-	def __init__(self, type: int, card_type: Optional[CardType] = None, count: Optional[int] = None, queue_id: Optional[int] = None, item_id: Optional[int] = None):
+	# PTN_REPLACE_IN_QUEUE
+	player_id: Optional[int] = None
+
+	# TODO: Implement SY
+	def __init__(self, type: int, card_type: Optional[CardType] = None, count: Optional[int] = None, queue_id: Optional[int] = None, item_id: Optional[int] = None, player_id: Optional[int] = None):
 		self.type = PlayerDecision.Type(type)
 		self.card_type = card_type
 		self.count = count
 		self.item_id = item_id
 		self.queue_id = queue_id
+		self.player_id = player_id
 
 	CARD_OFFSET = 21
 
@@ -230,6 +234,22 @@ class PlayerDecision:
 	#   - 0: First item
 	#   - 1: Second item
 	#  1: End turn (only when in turn 2, MD only turn)
+	# 32: PTN replaces a card in each queue for each player
+	#   - Q0:
+	#    - P0:
+	#       - 1
+	#       - 2
+	#       - 3
+	#       - LK
+	#       - MD
+	#       - PSN
+	#       - PTN
+	#       - SY
+	#     - P1:
+	#    - Q1: 
+	#     - P0:
+	#     - P1:
+	# TODO: Implement SY card
 	def _encode_action(self) -> int:
 		if self.type == PlayerDecision.Type.DRAW_CARD:
 			return 0
@@ -254,6 +274,15 @@ class PlayerDecision:
 			return 1 + 2 * PlayerDecision.CARD_OFFSET + self.item_id
 		elif self.type == PlayerDecision.Type.SKIP_2_TURN:
 			return 1 + 2 * PlayerDecision.CARD_OFFSET + 2
+		elif self.type == PlayerDecision.Type.PTN_REPLACE_IN_QUEUE:
+			assert self.card_type is not None
+			assert self.queue_id is not None
+			assert self.player_id is not None
+
+			offset = 1 + 2 * PlayerDecision.CARD_OFFSET + 2 + 1
+			ptn_decision_offset = (self.queue_id * 2 * len(CARD_INFO)) + (self.player_id * len(CARD_INFO)) + self.card_type.id
+
+			return offset + ptn_decision_offset
 		else:
 			assert False, "Invalid player decision type"
 
@@ -264,7 +293,7 @@ class PlayerDecision:
 
 	@staticmethod
 	def state_space_size() -> int:
-		return 1 + 2 * PlayerDecision.CARD_OFFSET + 2 + 1
+		return 1 + 2 * PlayerDecision.CARD_OFFSET + 2 + 1 + len(CARD_INFO) * 2 * 2
 
 	@staticmethod
 	def from_encoded_action(encoded_action: int) -> "PlayerDecision":
@@ -292,12 +321,27 @@ class PlayerDecision:
 
 		if encoded_action == 0:
 			return PlayerDecision(PlayerDecision.Type.SHOP_DECISION, item_id=0)
-		elif encoded_action == 1:
-			return PlayerDecision(PlayerDecision.Type.SHOP_DECISION, item_id=1)
-		elif encoded_action == 2:
-			return PlayerDecision(PlayerDecision.Type.SKIP_2_TURN)
+		encoded_action -= 1
 
-		assert False, "Invalid encoded action"
+		if encoded_action == 0:
+			return PlayerDecision(PlayerDecision.Type.SHOP_DECISION, item_id=1)
+		encoded_action -= 1
+
+		if encoded_action == 0:
+			return PlayerDecision(PlayerDecision.Type.SKIP_2_TURN)
+		encoded_action -= 1
+
+		card_id = encoded_action % len(CARD_INFO)
+		encoded_action //= len(CARD_INFO)
+
+		player_id = encoded_action % 2
+		queue_id = encoded_action // 2
+
+		assert card_id >= 0 and card_id < len(CARD_INFO)
+		assert queue_id == 0 or queue_id == 1
+		assert player_id == 0 or player_id == 1
+
+		return PlayerDecision(PlayerDecision.Type.PTN_REPLACE_IN_QUEUE, card_type=CARD_INFO[card_id][0], queue_id=queue_id, player_id=player_id)
 
 	def __eq__(self, other: Any):
 		if self.type != other.type:
@@ -309,12 +353,15 @@ class PlayerDecision:
 		if self.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
 			return self.card_type == other.card_type and self.count == other.count
 		
-		# TODO: Shop decision is commented for now
 		if self.type == PlayerDecision.Type.SHOP_DECISION:
 			return self.item_id == other.item_id and self.queue_id == other.queue_id
 		
 		if self.type == PlayerDecision.Type.SKIP_2_TURN:
 			return True
+		
+		if self.type == PlayerDecision.Type.PTN_REPLACE_IN_QUEUE:
+			return self.card_type == other.card_type and self.queue_id == other.queue_id and self.player_id == other.player_id
+
 
 		assert False
 
@@ -327,6 +374,11 @@ class PlayerDecision:
 			return f"Place item {self.item_id} in shop"
 		elif self.type == PlayerDecision.Type.SKIP_2_TURN:
 			return f"Skip 2 turn"
+		elif self.type == PlayerDecision.Type.PTN_REPLACE_IN_QUEUE:
+			assert self.card_type is not None
+			assert self.queue_id is not None
+			assert self.player_id is not None
+			return f"PTN replace {self.card_type.name} in queue {self.queue_id} for player {self.player_id}"
 		else:
 			assert False
 
@@ -718,6 +770,8 @@ def play_game(game_state: GameState, player0: Player, player_1: Player, verbose:
 			print()
 
 def set_decision(game_state: GameState, decision: Optional[PlayerDecision], player_id: int) -> None:
+	assert decision is not None
+
 	if game_state.state == GameStep.STATE_START:
 		pass
 
@@ -779,6 +833,30 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 			# When the player skips the turn, the game state should be set to the next turn
 			# as it player has played the MD card
 			pass
+		
+		elif decision.type == PlayerDecision.Type.PTN_REPLACE_IN_QUEUE:
+			if player_state.hand.get(CardType("PTN", 6), 0) == 0:
+				game_state.state = GameStep.STATE_ERROR
+				return
+
+			assert decision.queue_id is not None
+
+			queue = game_state.shops[decision.queue_id].queue
+
+			# Find the card in the queue
+			for i, queue_item in enumerate(queue):
+				if queue_item.card_type == decision.card_type and queue_item.player_id == decision.player_id:
+					queue[i] = QueueItem(CardType("PTN", 6), 1, player_id)
+
+					player_state.hand[CardType("PTN", 6)] -= 1
+					if player_state.hand[CardType("PTN", 6)] == 0:
+						del player_state.hand[CardType("PTN", 6)]
+
+					break
+			else:
+				game_state.state = GameStep.STATE_ERROR
+				return
+
 		else:
 			game_state.state = GameStep.STATE_ERROR
 			return
@@ -823,12 +901,13 @@ def get_legal_moves(game_state: GameState, player_id: int) -> npt.NDArray[np.flo
 	if game_state.state in [GameStep.STATE_TURN_0, GameStep.STATE_TURN_1, GameStep.STATE_TURN_2]:
 		# Only MD card can be played in the third turn
 		md_only_turn = game_state.state == GameStep.STATE_TURN_2
+		player_state = game_state.player_states[player_id]
 
 		# Can we draw a card?
 		index = 0
 
 		if not md_only_turn:
-			actions[index] = sum(game_state.player_states[player_id].deck.values()) > 0
+			actions[index] = sum(player_state.deck.values()) > 0
 
 		index += 1
 
@@ -839,7 +918,7 @@ def get_legal_moves(game_state: GameState, player_id: int) -> npt.NDArray[np.flo
 				# In all other cases, we can place any card
 				can_place_card = (md_only_turn and card_type.name == "MD") or not md_only_turn
 				if can_place_card:
-					actions[index] = game_state.player_states[player_id].hand.get(card_type, 0) >= j
+					actions[index] = player_state.hand.get(card_type, 0) >= j
 
 				index += 1
 
@@ -850,7 +929,7 @@ def get_legal_moves(game_state: GameState, player_id: int) -> npt.NDArray[np.flo
 				# In all other cases, we can place any card
 				can_place_card = (md_only_turn and card_type.name == "MD") or not md_only_turn
 				if can_place_card:
-					actions[index] = game_state.player_states[player_id].hand.get(card_type, 0) >= j
+					actions[index] = player_state.hand.get(card_type, 0) >= j
 
 				index += 1
 
@@ -858,14 +937,28 @@ def get_legal_moves(game_state: GameState, player_id: int) -> npt.NDArray[np.flo
 
 		# Can we skip the turn - are we in the second turn <=> have MD card
 		actions[index] = md_only_turn
+		index += 1
+	
+		player_has_ptn_card = player_state.hand.get(CardType("PTN", 6), 0) > 0
+
+
+		def card_in_queue(queue: List[QueueItem], card_type: CardType, player_id: int) -> bool:
+			return any(queue_item.card_type == card_type and queue_item.player_id == player_id for queue_item in queue)
+
+		# Can we replace a card in each queue with PTN card
+		if player_has_ptn_card:
+			for queue_id in range(2):
+				for player_id in range(2):
+					for card_type, card_count in CARD_INFO:
+						actions[index] = card_in_queue(game_state.shops[queue_id].queue, card_type, player_id)
+						index += 1
 
 	elif game_state.state == GameStep.STATE_SHOP_0_DECISION or game_state.state == GameStep.STATE_SHOP_1_DECISION:
 		index = 1 + 2 * PlayerDecision.CARD_OFFSET
 
 		shop = game_state.shops[0] if game_state.state == GameStep.STATE_SHOP_0_DECISION else game_state.shops[1]
 		# We don't have to check whether current player is winning in the shop, as the player can only make a decision if they are winning
-
-		# But the assert is regardless, to make sure the logic is correct
+		# But the assert is here regardless, to make sure the logic is correct
 		assert shop.get_player_score(player_id) > shop.get_player_score(1 - player_id)
 
 		if shop.get_item_count() == 2:
