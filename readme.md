@@ -102,3 +102,10 @@ state-value function Vπ(s) defined as, expected discounted return starting with
 - Off-policy RL - maintains two distinct policies: A behavior policy and a target policy
 - random utility model (RUM) - where choices are dependent on random state variable
 - Multi-Agents Reinforcement Learning (MARL)
+
+
+https://www.researchgate.net/publication/350660009_Self-Play_Reinforcement_Learning_with_Comprehensive_Critic_in_Computer_Games
+
+http://proceedings.mlr.press/v119/bai20a/bai20a.pdf
+https://arxiv.org/abs/2403.00841
+https://medium.com/applied-data-science/how-to-train-ai-agents-to-play-multiplayer-games-using-self-play-deep-reinforcement-learning-247d0b440717

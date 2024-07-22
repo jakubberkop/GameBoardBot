@@ -21,12 +21,13 @@
 			"justMyCode": true
 		},
 		{
-			"name": "Python: AA.py",
+			"name": "Python: evaluate human",
 			"type": "python",
 			"request": "launch",
-			"program": "AA.py",
+			"program": "evaluate.py",
 			"console": "integratedTerminal",
-			"justMyCode": true
+			"justMyCode": true,
+			"args": ["--human"]
 		}
 	]
 }
