@@ -235,7 +235,7 @@ class HumanPlayer(Player):
 		"SYrPTN",
 	]
 
-	assert len(TEXT_TO_DECISION) == PlayerDecision.state_space_size()
+	assert len(TEXT_TO_DECISION) == PlayerDecision.state_space_size(), f"{len(TEXT_TO_DECISION)} != {PlayerDecision.state_space_size()}"
 
 	def decision_text_to_id(self, text: str) -> Optional[int]:
 		try:
@@ -271,6 +271,10 @@ class HumanPlayer(Player):
 			decision_id = self.decision_text_to_id(decision_text)
 
 			if decision_id is None:
+				print("Invalid decision")
+				continue
+			
+			if decision_id >= len(legal_moves):
 				print("Invalid decision")
 				continue
 
@@ -330,7 +334,9 @@ def main(n: int):
 def human_game():
 	game = initialize_game_state()
 	human = HumanPlayer()
-	computer = PPOPlayer()
+	# computer = PPOPlayer()
+	# computer = SimplePlayer()
+	computer = RandomPlayer()
 	play_game(game, computer, human, verbose=True)
 
 	winner = "Human" if game.player_states[1].points > game.player_states[0].points else "Computer"

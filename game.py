@@ -1,9 +1,12 @@
+import random
+import pickle
+
 from dataclasses import dataclass, field
 from enum import IntEnum
-import random
 from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple, Type
 
 import tqdm
+
 import numpy as np
 import numpy.typing as npt
 
@@ -457,6 +460,10 @@ class GameState:
 	@state.setter
 	def state(self, value: GameStep) -> None:
 		assert GameStep(value) != GameStep.STATE_ERROR
+		# import sys
+		# import traceback
+		# print(f"State: {GameStep(self._state)} -> {value}", file=sys.stderr)
+		# traceback.print_stack()
 		self._state = value
 
 	def to_state_array(self, player_id: int) -> npt.NDArray[np.float32]:
@@ -785,30 +792,61 @@ def play_game_until_decision_one_player_that_is_not_a_shop_decision(game_state: 
 
 		return
 
-def play_game(game_state: GameState, player0: Player, player_1: Player, verbose: bool = False) -> None:
+@dataclass
+class GameRun:
+	move_and_states: List[GameState | PlayerDecision] = field(default_factory=list)
 
-	while not game_is_over(game_state):
-		play_game_until_decision(game_state)
+	def to_file(self, file_path: str) -> None:
+		with open(file_path, "wb") as f:
+			pickle.dump(self, f)
 
-		if verbose:
-			print_game_state(game_state)
+	@staticmethod
+	def from_file(file_path: str) -> "GameRun":
+		with open(file_path, "rb") as f:
+			return pickle.load(f)
 
-		if game_is_over(game_state):
-			return
-		if game_state.turn == AI_PLAYER_ID:
-			decision = player0.run_player_decision(game_state, AI_PLAYER_ID)
-			set_decision(game_state, decision, AI_PLAYER_ID)
-		elif game_state.turn == NPC_PLAYER_ID:
-			decision = player_1.run_player_decision(game_state, NPC_PLAYER_ID)
-			set_decision(game_state, decision, NPC_PLAYER_ID)
-		else:
-			assert False, "Player turn is invalid"
 
-		# TODO: Fix printing
-		if verbose:
-			print()
-			print(f"Decision: {decision} - Player {game_state.turn}")
-			print()
+def play_game(game_state: GameState, player0: Player, player_1: Player, verbose: bool = False):
+
+	game_run = GameRun()
+	game_run.move_and_states.append(game_state)
+
+	try:
+		while not game_is_over(game_state):
+			play_game_until_decision(game_state)
+			game_run.move_and_states.append(game_state)
+
+			if verbose:
+				print_game_state(game_state)
+
+			if game_is_over(game_state):
+				return
+			if game_state.turn == AI_PLAYER_ID:
+				decision = player0.run_player_decision(game_state, AI_PLAYER_ID)
+				game_run.move_and_states.append(decision)
+				set_decision(game_state, decision, AI_PLAYER_ID)
+			elif game_state.turn == NPC_PLAYER_ID:
+				decision = player_1.run_player_decision(game_state, NPC_PLAYER_ID)
+				game_run.move_and_states.append(decision)
+				set_decision(game_state, decision, NPC_PLAYER_ID)
+			else:
+				assert False, "Player turn is invalid"
+
+			# TODO: Fix printing
+			if verbose:
+				print()
+				print(f"Decision: {decision} - Player {game_state.turn}")
+				print()
+	except Exception as e:
+		game_run.to_file("last_game_run.pkl")
+		raise e
+
+def queue_id_with_sy_card(game_state: GameState, player_id: int) -> Optional[int]:
+	for queue_id, shop in enumerate(game_state.shops):
+		if any(queue_item.card_type == CardType("SY", 8) and queue_item.player_id == player_id for queue_item in shop.queue):
+			return queue_id
+
+	return None
 
 def set_decision(game_state: GameState, decision: Optional[PlayerDecision], player_id: int) -> None:
 	assert decision is not None
@@ -1101,19 +1139,52 @@ def test_decision_encoding_decoding() -> None:
 		assert decision.encode_action() == i, f"Decoding and encoding failed for {decision}"
 		assert PlayerDecision.from_encoded_action(decision.encode_action()) == decision
 
+def run_last_move():
+	game_run = GameRun.from_file("last_game_run.pkl")
+	
+	last_decision_index = [i for i, e in enumerate(game_run.move_and_states) if isinstance(e, PlayerDecision)][-1]
+	last_state_index = [i for i, e in enumerate(game_run.move_and_states) if isinstance(e, GameState)][-1]
+
+	assert abs(last_decision_index - last_state_index) == 1, f"Last decision and last state are not adjacent {last_decision_index} {last_state_index}"
+
+	last_game_state = game_run.move_and_states[last_state_index]
+	last_decision = game_run.move_and_states[last_decision_index]
+
+	assert isinstance(last_game_state, GameState)
+	assert isinstance(last_decision, PlayerDecision)
+
+	print_game_state(last_game_state)
+	print(f"Decision: {last_decision} - Player {last_game_state.turn}")
+
+	print("Legal moves:")
+	legal_moves = get_legal_moves(last_game_state, last_game_state.turn)
+
+	for i, e in enumerate(legal_moves):
+		if e == 1:
+			print(PlayerDecision.from_encoded_action(i))
+
+	set_decision(last_game_state, last_decision, last_game_state.turn)
+
+
+
+
 if __name__ == "__main__":
+
+	# run_last_move()
+
 	# score = 0
-	# test_decision_encoding_decoding()
+	test_decision_encoding_decoding()
 
-	# # for i in tqdm.tqdm(range(1000)):
-	game = initialize_game_state()
-	play_game(game, RandomPlayer(), RandomPlayer(), verbose=False)
+	for i in tqdm.tqdm(range(1_000)):
+		game = initialize_game_state()
+		play_game(game, RandomPlayer(), RandomPlayer(), verbose=False)
 
-	assert game_is_over(game)
+	# assert game_is_over(game)
 
 	# score += get_game_score(game)
 
 	# print(f"Average score: {score / 1000}")
 
+	print(PlayerDecision.state_space_size())
 
-STATE_SIZE = len(initialize_game_state().to_state_array(0))
+# STATE_SIZE = len(initialize_game_state().to_state_array(0))

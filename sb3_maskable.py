@@ -18,7 +18,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-n", type=int, default=1, help="Number of parallel environments")
+    parser.add_argument("-n", type=int, default=100, help="Number of parallel environments")
     parser.add_argument("-i", type=int, default=100_000, help="Number of iterations")
 
     args = parser.parse_args()
@@ -35,8 +35,7 @@ if __name__ == "__main__":
 
     # model = MaskablePPO.load("ppo_mask_extended_1000000_2024-07-08_20-57-50", env, verbose=1, tensorboard_log="runs")
     checkpoint_callback = CheckpointCallback(save_freq=100, save_path='./model_checkpoints/')
-
-    model = MaskablePPO("MlpPolicy", env, n_steps=64, gamma=0.8, verbose=1, tensorboard_log="runs")
+    model = MaskablePPO("MlpPolicy", env, n_steps=64, gamma=0.8, verbose=1, tensorboard_log="runs", device="cuda")
 
     model.learn(args.i, callback=checkpoint_callback, log_interval=1, progress_bar=True)
 
