@@ -2,7 +2,7 @@ import random
 import pickle
 
 from dataclasses import dataclass, field
-from enum import IntEnum
+from enum import Enum, IntEnum
 from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple, Type
 
 import tqdm
@@ -14,6 +14,9 @@ import numpy.typing as npt
 # set_tracing_mode(TracingMode.All)
 
 PRIVATE_STATE = True
+
+def is_int_like(maybe_number: Any) -> bool:
+	return type(maybe_number) is np.int64 or type(maybe_number) is int
 
 @dataclass
 class CardType:
@@ -135,6 +138,23 @@ class ShopState:
 
 		return score
 
+	def winning_player(self) -> Optional[int]:
+		score0 = self.get_player_score(0)
+		score1 = self.get_player_score(1)
+
+		if score0 == score1:
+			return None
+
+		player_0_card_count = sum(queue_item.count for queue_item in self.queue if queue_item.player_id == 0)
+		player_1_card_count = sum(queue_item.count for queue_item in self.queue if queue_item.player_id == 1)
+
+		if score0 > score1 and player_0_card_count > 0:
+			return 0
+		elif score1 > score0 and player_1_card_count > 0:
+			return 1
+		else:
+			return None
+
 	def get_item_count(self) -> int:
 		return len(self.items)
 	
@@ -175,6 +195,27 @@ class ShopState:
 		queue_str = " ".join([f"{queue_item.card_type.name}x{queue_item.count}" for queue_item in self.queue])
 		return f"Items: {item_str} Queue: {queue_str} Limbo: {self.limbo_item}"
 
+	def add_card_to_queue(self, card_type: CardType, count: int, player_id: int) -> None:
+		for queue_item in self.queue:
+			if queue_item.player_id == player_id and queue_item.card_type == card_type:
+				queue_item.count += 1
+				return
+
+		self.queue.append(QueueItem(card_type, count, player_id))
+
+	def remove_card_from_queue(self, card_type: CardType, player_id: int) -> None:
+		for i, queue_item in enumerate(self.queue):
+			if queue_item.card_type == card_type and queue_item.player_id == player_id:
+				queue_item.count -= 1
+				assert queue_item.count >= 0
+
+				if queue_item.count == 0:
+					self.queue.pop(i)
+
+				return 
+
+		assert False, "Invalid move"
+
 class PlayerDecision:
 	class Type(IntEnum):
 		DRAW_CARD = 0
@@ -197,7 +238,6 @@ class PlayerDecision:
 	# PTN_REPLACE_IN_QUEUE
 	player_id: Optional[int] = None
 
-	# TODO: Implement SY
 	def __init__(self, type: int, card_type: Optional[CardType] = None, count: Optional[int] = None, queue_id: Optional[int] = None, item_id: Optional[int] = None, player_id: Optional[int] = None):
 		self.type = PlayerDecision.Type(type)
 		self.card_type = card_type
@@ -578,22 +618,16 @@ def run_shop_until(game_state: GameState, shop_id: int, player_id: int) -> None:
 	
 	shop = game_state.shops[shop_id]
 
-	score0 = shop.get_player_score(0)
-	score1 = shop.get_player_score(1)
+	winner_id = shop.winning_player()
 
-	if score0 == score1:
+	if winner_id is None:
 		if shop_id == 0:
 			game_state.state = GameStep.STATE_SHOP_1
 		else:
 			game_state.state = GameStep.STATE_TURN_0
 		return
-	
-	if score0 > score1:
-		winner = 0
-	else:
-		winner = 1
 
-	if player_id != winner:
+	if player_id != winner_id:
 		if shop_id == 0:
 			game_state.state = GameStep.STATE_SHOP_1
 		else:
@@ -615,7 +649,7 @@ def run_shop_until(game_state: GameState, shop_id: int, player_id: int) -> None:
 		player_states = game_state.player_states
 
 		player_states[limbo_item.player_id].points += limbo_item.item.value
-		player_states[winner].points += shop.items[0].value
+		player_states[winner_id].points += shop.items[0].value
 
 		game_state.shops[shop_id] = ShopState()
 		shop = game_state.shops[shop_id]
@@ -893,6 +927,10 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 			player_state.hand[draw_card] += 1
 
 		elif decision.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
+			assert type(decision.card_type) is CardType
+			assert is_int_like(decision.count)
+			assert type(decision.queue_id) is int
+
 			if md_only_state and decision.card_type.name != "MD":
 				game_state.state = GameStep.STATE_ERROR
 				return
@@ -906,8 +944,8 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 			if player_state.hand[decision.card_type] == 0:
 				del player_state.hand[decision.card_type]
 
-			game_state.shops[decision.queue_id].queue.append(QueueItem(decision.card_type, decision.count, player_id))
-		
+			game_state.shops[decision.queue_id].add_card_to_queue(decision.card_type, decision.count, player_id)
+
 		elif decision.type == PlayerDecision.Type.SKIP_2_TURN:
 			# When the player skips the turn, the game state should be set to the next turn
 			# as it player has played the MD card
@@ -919,22 +957,17 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 				return
 
 			assert decision.queue_id is not None
+			assert type(decision.card_type) is CardType
+			assert is_int_like(decision.player_id)
 
-			queue = game_state.shops[decision.queue_id].queue
+			shop = game_state.shops[decision.queue_id]
 
-			# Find the card in the queue
-			for i, queue_item in enumerate(queue):
-				if queue_item.card_type == decision.card_type and queue_item.player_id == decision.player_id:
-					queue[i] = QueueItem(CardType("PTN", 6), 1, player_id)
+			shop.remove_card_from_queue(decision.card_type, decision.player_id)
+			shop.add_card_to_queue(CardType("PTN", 6), 1, player_id)
 
-					player_state.hand[CardType("PTN", 6)] -= 1
-					if player_state.hand[CardType("PTN", 6)] == 0:
-						del player_state.hand[CardType("PTN", 6)]
-
-					break
-			else:
-				game_state.state = GameStep.STATE_ERROR
-				return
+			player_state.hand[CardType("PTN", 6)] -= 1
+			if player_state.hand[CardType("PTN", 6)] == 0:
+				del player_state.hand[CardType("PTN", 6)]
 
 		elif decision.type == PlayerDecision.Type.SY_REPLACE_IN_QUEUE:
 			queue_id = queue_id_with_sy_card(game_state, player_id)
@@ -1091,6 +1124,26 @@ def get_legal_moves(game_state: GameState, player_id: int) -> npt.NDArray[np.flo
 		assert False, f"Legal moves not implemented for {game_state.state.name}"
 
 	return actions
+
+class GameRestult(Enum):
+	PLAYER_0_WIN = 1
+	PLAYER_1_WIN = 2
+	DRAW = 3
+
+def play_single_game(player_0: Player, player_1: Player) -> GameRestult:
+	game_state = initialize_game_state()
+	play_game(game_state, player_0, player_1, verbose=False)
+	assert game_is_over(game_state)
+
+	player_0_score = game_state.player_states[0]
+	player_1_score = game_state.player_states[1]
+
+	if player_0_score.points > player_1_score.points:
+		return GameRestult.PLAYER_0_WIN
+	elif player_0_score.points == player_1_score.points:
+		return GameRestult.DRAW
+	else:
+		return GameRestult.PLAYER_1_WIN
 
 class RandomPlayer(Player):
 

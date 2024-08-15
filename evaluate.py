@@ -1,6 +1,7 @@
 import os
 import argparse
 
+from pathlib import Path
 from typing import Sequence
 
 import tqdm
@@ -10,11 +11,6 @@ from sb3_contrib import MaskablePPO
 from game import *
 
 Scores = List[int]
-
-# import pytracy
-# pytracy.set_tracing_mode(pytracy.TracingMode.All)
-# pytracy.add_path_to_filter("/")
-
 
 def evaluate_player_pair(player0: Player, player1: Player, game_count: int) -> Scores:
 	scores: List[int] = []
