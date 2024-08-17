@@ -209,7 +209,7 @@ class Elo(object):
     def adjust_1vs1(self, rating1, rating2, drawn=False):
         return self.adjust(rating1, [(DRAW if drawn else WIN, rating2)])
 
-    def rate_1vs1(self, rating1, rating2, drawn=False):
+    def rate_1vs1(self, rating1: Rating , rating2: Rating, drawn: bool = False):
         scores = (DRAW, DRAW) if drawn else (WIN, LOSS)
         return (self.rate(rating1, [(scores[0], rating2)]),
                 self.rate(rating2, [(scores[1], rating1)]))

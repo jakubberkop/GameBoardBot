@@ -289,21 +289,22 @@ class HumanPlayer(Player):
 
 class PPOPlayer(Player):
 
-	def get_newest_model(self):
-		
-		models = [f for f in os.listdir() if f.startswith("ppo_mask")]
+	@staticmethod
+	def get_newest_model(model_folder: str = ".", model_mask: str = "ppo_mask") -> "PPOPlayer":
+		models = [str(Path(model_folder) / Path(f)) for f in os.listdir(model_folder) if f.startswith(model_mask)]
 		models.sort(key=lambda x: os.path.getmtime(x))
-		return models[-1]
+		return PPOPlayer.from_model_name(models[-1])
 
-	def __init__(self, model_name: str | None = None) -> None:
+	@staticmethod
+	def from_model_name(model_name: str) -> "PPOPlayer":
+		return PPOPlayer(MaskablePPO.load(model_name), model_name)
+
+	def __init__(self, model: MaskablePPO, model_name: str) -> None:
+		self.model = model
 		self.model_name = model_name
 
-		if model_name is None:
-			self.model_name = self.get_newest_model()
-
+		assert self.model is not None
 		assert self.model_name is not None
-
-		self.model = MaskablePPO.load(self.model_name)
 
 	def run_player_decision(self, game_state: GameState, player_id: int) -> PlayerDecision:
 		obs = np.array(game_state.to_state_array(player_id))
@@ -311,7 +312,7 @@ class PPOPlayer(Player):
 		return PlayerDecision.from_encoded_action(action)
 
 	def name(self) -> str:
-		return f"PPO: {self.model_name[-10:]}"
+		return f"PPO: {self.model_name}"
 
 
 def main(n: int):
@@ -323,17 +324,17 @@ def main(n: int):
 		# TransformerPlayer(),
 		# PPOPlayer("ppo_mask_fixed_reward_500000"),
 		# PPOPlayer("ppo_mask_5000"),
-		PPOPlayer() # Newest model
+		PPOPlayer.get_newest_model(), # Newest model
+		PPOPlayer.get_newest_model("ppo_elo", "m_") # Newest model
 	]
 	evaluate_players(players, n)
 
 def human_game():
 	game = initialize_game_state()
 	human = HumanPlayer()
-	# computer = PPOPlayer()
-	# computer = SimplePlayer()
-	computer = RandomPlayer()
-	play_game(game, computer, human, verbose=True)
+	computer = PPOPlayer.from_model_name("ppo_elo/m_2024-08-15_00-14-32.zip")
+
+	play_game(game, computer, human, verbose=True, human_player=1)
 
 	winner = "Human" if game.player_states[1].points > game.player_states[0].points else "Computer"
 	print(f"Game over. {winner} won")

@@ -10,9 +10,6 @@ import tqdm
 import numpy as np
 import numpy.typing as npt
 
-# from pytracy import *
-# set_tracing_mode(TracingMode.All)
-
 PRIVATE_STATE = True
 
 def is_int_like(maybe_number: Any) -> bool:
@@ -691,17 +688,23 @@ def get_game_score(game_state: GameState) -> int:
 
 	return ai_player.points - npc_player.points
 
-def print_game_state(game_state: GameState) -> None:
+def print_game_state(game_state: GameState, human_player: Optional[int] = None) -> None:
 	print()
 
 	def hand_state(hand: Dict[CardType, int]) -> str:
 		return ' '.join([f'{card_type.name}x{count}' for card_type, count in hand.items()])
 
+	def player_state_str(player_state: PlayerState, hidden: bool = False) -> str:
+		if hidden:
+			return f"P: {player_state.points:3} D: {sum(player_state.deck.values()):2} H: {sum(player_state.hand.values()):2}"
+		else:
+			return f"P: {player_state.points:3} D: {sum(player_state.deck.values()):2} H: {sum(player_state.hand.values()):2} {hand_state(player_state.hand):20}"
+
 	player = game_state.player_states[0]
-	print(f"Player 0: P: {player.points:3} D: {sum(player.deck.values()):2} H: {sum(player.hand.values()):2} {hand_state(player.hand):20} {'<-----' if game_state.turn == 0 else '' }")
+	print(f"Player 0: {player_state_str(player, human_player == 1)} {'<-----' if game_state.turn == 0 else '' }")
 
 	player = game_state.player_states[1]
-	print(f"Player 1: P: {player.points:3} D: {sum(player.deck.values()):2} H: {sum(player.hand.values()):2} {hand_state(player.hand):20} {'<-----' if game_state.turn == 1 else '' }")
+	print(f"Player 1: {player_state_str(player, human_player == 0)} {'<-----' if game_state.turn == 1 else '' }")
 
 	def queue_state(shop: ShopState) -> str:
 		# TODO: Evaluate better
@@ -840,8 +843,7 @@ class GameRun:
 			return pickle.load(f)
 
 
-def play_game(game_state: GameState, player0: Player, player_1: Player, verbose: bool = False):
-
+def play_game(game_state: GameState, player0: Player, player_1: Player, verbose: bool = False, human_player: Optional[int] = None) -> None:
 	game_run = GameRun()
 	game_run.move_and_states.append(game_state)
 
@@ -851,7 +853,7 @@ def play_game(game_state: GameState, player0: Player, player_1: Player, verbose:
 			game_run.move_and_states.append(game_state)
 
 			if verbose:
-				print_game_state(game_state)
+				print_game_state(game_state, human_player)
 
 			if game_is_over(game_state):
 				return

@@ -7,6 +7,7 @@ import random
 from dataclasses import dataclass
 from typing import List, Optional
 
+from matplotlib.pylab import f
 import tqdm
 
 import numpy as np
@@ -22,19 +23,21 @@ from game_env import GameEnv
 
 from evaluate import PPOPlayer
 
-
+# import pytracy
+# pytracy.set_tracing_mode(pytracy.TracingMode.All)
+# pytracy.add_path_to_filter("/")
 
 K = 16 # Based on expert knowledge of a professional board game player
-ELO_GAME_COUNT = 5
 ENV_VEC_SIZE = 100
 N_STEP = 64
 GAMMA = 0.8
-DEVICE = "cpu"
-ITERATIONS = 50_000
-META_LEARNING_ITERATIONS = 10
+DEVICE = "cuda"
+ITERATIONS = 100_000
+META_LEARNING_ITERATIONS = 100
 LOG_INTERVAL = 20
 USE_EXITING_MODELS = True
 
+ELO_GAME_COUNT = 50
 GAME_COUNT_PER_LEAGUE = 500
 GAME_COUNT_PER_LEVEL = GAME_COUNT_PER_LEAGUE // ELO_GAME_COUNT
 
@@ -63,16 +66,15 @@ class EloLearnig:
         for player in [RandomPlayer, AlwaysFirstPlayer, AlwaysLastPlayer]:
             self.league.append(LeagueEntry(player(), None, e.Rating()))
 
-def get_env(meta: EloLearnig) -> GameEnv:
-    # TODO: Incorporate quality of the player
-    # from elo import Rating, quality_1vs1, rate_1vs1
-    # alice, bob = Rating(1000), Rating(1400)  # assign Alice and Bob's ratings
-    # if quality_1vs1(alice, bob) < 0.50:
-    #     print('This match seems to be not so fair')
-    # alice, bob = rate_1vs1(alice, bob)  # update the ratings after the match
+    def load_pretrained_models(self):
+        import load_all
+        for model, model_name in tqdm.tqdm(load_all.get_all_okay_models(), desc="Loading models"):
+            self.league.append(LeagueEntry(PPOPlayer(model, model_name), model, e.Rating()))
 
-    # TODO: Pick only the best players
-    player_instances = [l.player for l in meta.league]
+def get_env(meta: EloLearnig) -> GameEnv:
+    sorted_league = sorted(meta.league, key=lambda x: x.rating, reverse=True)
+    # get 10 best players
+    player_instances = [l.player for l in sorted_league[:10]]
 
     if ENV_VEC_SIZE == 1:
         env = GameEnv(player_instances=player_instances)
@@ -86,15 +88,7 @@ def get_env(meta: EloLearnig) -> GameEnv:
 def print_league_for_all_models():
     meta = EloLearnig(K)
 
-    exiting_models = [f for f in os.listdir(MODEL_PATH)]
-    assert USE_EXITING_MODELS and len(exiting_models) != 0, "No existing models found"
-
-    env = sb3_vec_env.DummyVecEnv([lambda: GameEnv() for _ in range(ENV_VEC_SIZE)])
-
-    for model_name in exiting_models:
-        model_name = f"{MODEL_PATH}/{model_name}"
-        model = MaskablePPO.load(model_name, env, n_steps=N_STEP, gamma=GAMMA, verbose=1, tensorboard_log=TENSORBOARD_PATH, device=DEVICE)
-        meta.league.append(LeagueEntry(PPOPlayer(model, model_name), model, e.Rating()))
+    meta.load_pretrained_models()
 
     update_league(meta)
     print_league(meta)
@@ -124,6 +118,7 @@ def get_model_for_trainig(meta: EloLearnig) -> MaskablePPO:
     env = get_env(meta)
     ppo_players = [l.player for l in meta.league if l.model is not None]
 
+    # TODO: Sometimes start with a new model
     if len(ppo_players) == 0:
         return get_initial_model(env)
 
@@ -152,6 +147,8 @@ def update_league(data: EloLearnig):
                 b.rating, a.rating = data.elo.rate_1vs1(b.rating, a.rating)
             else:
                 a.rating, b.rating = data.elo.rate_1vs1(a.rating, b.rating, drawn=True)
+
+        print_league(data)
 
 def print_league(data: EloLearnig):
     for l in sorted(data.league, key=lambda x: x.rating, reverse=True):
@@ -185,17 +182,18 @@ if __name__ == "__main__":
         print_league_for_all_models()
         exit(0)
 
-    checkpoint_callback = CheckpointCallback(save_freq=100, save_path='./model_checkpoints_elo/')
+    checkpoint_callback = CheckpointCallback(save_freq=1000, save_path='./model_checkpoints_elo/')
     stop_on_success_rate_callback = EvalOnSucess(0.95)
     callbacks = [checkpoint_callback, stop_on_success_rate_callback]
 
     metalearning = EloLearnig(K)
+    metalearning.load_pretrained_models()
+    update_league(metalearning)
 
-    for _ in range(META_LEARNING_ITERATIONS):
+    for i in range(META_LEARNING_ITERATIONS):
+        print(f"Meta learning iteration {i}/{META_LEARNING_ITERATIONS}")
         model = get_model_for_trainig(metalearning)
         print(model.policy)
-
-        # TODO: Make training finnish after reaching 90% win rate
 
         # Learn the model
         model.learn(args.i, tb_log_name="PPO_elo", callback=[checkpoint_callback, stop_on_success_rate_callback], log_interval=LOG_INTERVAL, progress_bar=True)
