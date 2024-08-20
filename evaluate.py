@@ -332,7 +332,7 @@ def main(n: int):
 def human_game():
 	game = initialize_game_state()
 	human = HumanPlayer()
-	computer = PPOPlayer.from_model_name("ppo_elo/m_2024-08-15_00-14-32.zip")
+	computer = PPOPlayer.from_model_name("ppo_elo/m_2024-08-19_19-14-00.zip")
 
 	play_game(game, computer, human, verbose=True, human_player=1)
 
