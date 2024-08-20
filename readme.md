@@ -2,6 +2,7 @@
 
 Install dependencies
 `pip install -r requirements.txt`
+`pip install sb3-contrib` (needs to be a separate command for some reason)
 
 Training project:
 `python3 sb3_maskable.py -n 10`
@@ -9,7 +10,11 @@ Training project:
 Run tensorboard:
 `tensorboard --logdir=runs/`
 
-Evaluate model results: `python3 evaluate.py`
+Evaluate model results:
+`python3 evaluate.py`
+
+Play against the model:
+`python3 evaluate.py --human`
 
 > Notes: evaluate.py hard codes the ppo model path, so it needs to be updated if the model is saved in a different location.
 
