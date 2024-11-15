@@ -437,6 +437,7 @@ class PlayerDecision:
 		if self.type == PlayerDecision.Type.DRAW_CARD:
 			return f"Draw card"
 		elif self.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
+			assert self.card_type is not None
 			return f"Place {self.card_type.name}x{self.count} in queue {self.queue_id}"
 		elif self.type == PlayerDecision.Type.SHOP_DECISION:
 			return f"Place item {self.item_id} in shop"
@@ -897,6 +898,7 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 
 		shop = game_state.shops[0]
 
+		assert decision.item_id is not None
 		shop.place_item_in_limbo(decision.item_id, player_id)
 		
 		game_state.state = GameStep.STATE_SHOP_1
@@ -909,6 +911,7 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 
 		shop = game_state.shops[1]
 
+		assert decision.item_id is not None
 		shop.place_item_in_limbo(decision.item_id, player_id)
 		
 		game_state.state = GameStep.STATE_TURN_0
@@ -929,13 +932,12 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 			player_state.hand[draw_card] += 1
 
 		elif decision.type == PlayerDecision.Type.PLACE_CARD_IN_QUEUE:
-			assert type(decision.card_type) is CardType
-			assert is_int_like(decision.count)
-			assert type(decision.queue_id) is int
-
+			assert decision.card_type is not None
 			if md_only_state and decision.card_type.name != "MD":
 				game_state.state = GameStep.STATE_ERROR
 				return
+			
+			assert decision.count is not None
 
 			if player_state.hand[decision.card_type] < decision.count:
 				game_state.state = GameStep.STATE_ERROR
@@ -946,6 +948,7 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 			if player_state.hand[decision.card_type] == 0:
 				del player_state.hand[decision.card_type]
 
+			assert decision.queue_id is not None
 			game_state.shops[decision.queue_id].add_card_to_queue(decision.card_type, decision.count, player_id)
 
 		elif decision.type == PlayerDecision.Type.SKIP_2_TURN:
@@ -984,6 +987,7 @@ def set_decision(game_state: GameState, decision: Optional[PlayerDecision], play
 			# Find the card in the queue
 			for i, queue_item in enumerate(sy_queue):
 				if queue_item.card_type == CardType("SY", 8) and queue_item.player_id == player_id:
+					assert decision.card_type is not None
 					sy_queue[i] = QueueItem(decision.card_type, 1, player_id)
 					break
 
