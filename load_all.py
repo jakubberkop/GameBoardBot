@@ -12,12 +12,6 @@ def get_all_models():
             if file.endswith(".zip"):
                 models.append(f"{folder}/{file}")
 
-
-        # for root, dirs, files in os.walk(folder):
-        #     for file in files:
-        #         if file.endswith(".zip"):
-        #             models.append(f"{root}/{file}")
-
     models.sort(key=lambda x: os.path.getmtime(x))
 
     return models

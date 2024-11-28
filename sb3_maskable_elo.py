@@ -7,7 +7,6 @@ import random
 from dataclasses import dataclass
 from typing import List, Optional
 
-from matplotlib.pylab import f
 import tqdm
 
 import numpy as np
@@ -22,10 +21,6 @@ from game import GameRestult, Player, RandomPlayer, AlwaysFirstPlayer, AlwaysLas
 from game_env import GameEnv
 
 from evaluate import PPOPlayer
-
-# import pytracy
-# pytracy.set_tracing_mode(pytracy.TracingMode.All)
-# pytracy.add_path_to_filter("/")
 
 K = 16 # Based on expert knowledge of a professional board game player
 ENV_VEC_SIZE = 100
